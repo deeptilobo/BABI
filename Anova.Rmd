@@ -1,0 +1,272 @@
+---
+title: "Anova_Problems"
+author: "Deepti Lobo"
+date: "3 June 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE }
+library(reshape2)
+library(CARS)
+library(car)
+```
+1.	Suppose that a random sample of n = 5 was selected from the vineyard properties for sale in Sonoma County, California, in each of three years.  The following data are consistent with summary information on price per  acre for disease-resistant grape vineyards in Sonoma County. Carry out an ANOVA to determine whether there is evidence to support the claim that the mean price per acre for vineyard land in Sonoma County was not the same for each of the three years considered.  Test at the 0.05 level and at the 0.01 level.
+
+1996:	30000	34000	36000	38000	40000
+1997:	30000	35000	37000	38000	40000
+1998:	40000	41000	43000	44000	50000
+
+```{r}
+y1996 = c(30000, 34000, 36000, 38000, 40000)
+y1997 = c(30000, 35000, 37000, 38000, 40000)
+y1998 = c(40000, 41000, 43000, 44000, 50000)
+
+PricePerAcre = cbind(y1996,y1997,y1998)
+
+PricePerAcre = melt(PricePerAcre,value.name = "Price",varnames = c("SrNo","Years"))
+PricePerAcre = PricePerAcre[,-1]
+str(PricePerAcre)
+
+#Assumption 1:Test of Normality for each group
+shapiro.test(PricePerAcre[PricePerAcre$Years=="y1996",]$Price)
+shapiro.test(PricePerAcre[PricePerAcre$Years=="y1997",]$Price)
+shapiro.test(PricePerAcre[PricePerAcre$Years=="y1998",]$Price)
+
+#Conclusion : Group's observation is normal
+
+#Assumption 2 : Test of homogeniety : Ho = Group variance are same : Ha = Group variance are different
+leveneTest(PricePerAcre$Price~PricePerAcre$Years)
+
+#conclusion:
+#Ho = group variance are same
+
+#Ho = population means are all same
+#H1 =  at least one pair is not same
+
+model_aov1 = aov(PricePerAcre$Price~PricePerAcre$Years)
+
+#0.01 - significance level
+model_aov1 = aov(PricePerAcre$Price~PricePerAcre$Years)
+
+summary(model_aov1)
+
+#Conclusion:
+ #@0.05 level: #H1 = at least one pair is not same
+#@0.01 level : #Ho = population means are all same
+
+#cannot conclude that the mean price per acre was different in these years.
+#At the 0.05 level, we do reject the null hypothesis and say that the mean price
+#per acre was not the same in each year.
+
+#0.05 level: Post - hoc /multi comparison
+TukeyHSD(model_aov1)
+
+plot(TukeyHSD(model_aov1))
+
+```
+
+2.	The following data on calcium content of wheat are consistent with summary quantities that appeared in the article "Mineral Contents of Cereal Grains as Affected by Storage and Insect Infestation" (Journal of Stored Products Research [1992]). Four different storage times were considered. Is there sufficient evidence to conclude that the mean calcium content is not the same for the four different storage times?  Test  the appropriate hypotheses at the 0.05 level.
+Storage Time	Observations	
+0 months	58.75	57.94	58.91	56.85	55.21	57.30
+1 month	  58.87	56.43	56.51	57.67	59.75	58.48
+2 months	59.13	60.38	58.01	59.95	59.51	60.34
+3 months	62.32	58.76	60.03	59.36	59.61	61.95
+
+
+```{r}
+a_month =	c(58.75,	57.94,	58.91,	56.85,	55.21,	57.30)
+b_month	= c(58.87,	56.43,	56.51,	57.67,	59.75,	58.48)
+c_month =	c(59.13,	60.38,	58.01,	59.95,	59.51,	60.34)
+d_month =	c(62.32,	58.76,	60.03,	59.36,	59.61,	61.95)
+
+CalciumPerMonth = cbind(a_month,b_month,c_month,d_month)
+
+CalciumPerMonth = melt(CalciumPerMonth,value.name = "Content",varnames = c("SrNo","Months"))
+CalciumPerMonth = CalciumPerMonth[,-1]
+str(CalciumPerMonth)
+
+#Assumption 1:Test of Normality for each group
+shapiro.test(CalciumPerMonth[CalciumPerMonth$Months=="a_month",]$Content)
+shapiro.test(CalciumPerMonth[CalciumPerMonth$Months=="b_month",]$Content)
+shapiro.test(CalciumPerMonth[CalciumPerMonth$Months=="c_month",]$Content)
+shapiro.test(CalciumPerMonth[CalciumPerMonth$Months=="d_month",]$Content)
+
+#Conclusion : Group's observation is normal
+
+#Assumption 2 : Test of homogeniety : Ho = Group variance are same : Ha = Group variance are different
+
+leveneTest(CalciumPerMonth$Content~CalciumPerMonth$Months)
+
+#conclusion:
+#Ho = group variance are same
+
+#Ho = population means are all same
+#H1 =  at least one pair is not same
+
+model_aov2 = aov(CalciumPerMonth$Content~CalciumPerMonth$Months)
+
+#0.05 - significance level
+model_aov2 = aov(CalciumPerMonth$Content~CalciumPerMonth$Months)
+
+summary(model_aov2)
+
+#Conclusion:
+#@0.05 level: #H1 = at least one pair is not same
+#We reject the null hypothesis. We conclude that the mean calcium content is not
+#the same for the four different storage times.
+
+#0.05 level: Post - hoc /multi comparison
+TukeyHSD(model_aov2)
+
+plot(TukeyHSD(model_aov2))
+
+```
+
+3.	Use the data below, showing a summary of highway gas mileage for several observations, to decide if the average highway gas mileage is the same for midsize cars, SUV's, and pickup trucks. Test the appropriate hypotheses at the ?? = 0.01 level.
+
+        n	    Mean	Std.Dev.
+Midsize	31	  25.8	2.56
+SUV's	  31	  22.68	3.67
+Pickups	14	  21.29	2.76
+
+```{r}
+n_midsize = 31
+n_suv = 31
+n_pickup = 14
+
+mean_midsize = 25.8
+mean_suv = 22.68
+mean_pickup = 21.29
+
+std_midsize = 2.56
+std_suv = 3.67
+std_pickup = 2.76
+
+n = n_midsize + n_suv + n_pickup # total no of observations
+c = 3 # no of groups
+
+grand_mean = (mean_midsize + mean_suv +mean_pickup)/c
+
+SSB = n_midsize*((mean_midsize-grand_mean)^2) + n_suv*((mean_suv - grand_mean)^2) + n_pickup*((mean_pickup - grand_mean)^2)
+
+SSW = (std_midsize^2)*(n_midsize-1) + (std_suv^2)*(n_suv-1) + (std_pickup^2)*(n_pickup-1)
+
+MSSB = SSB/(c-1)
+
+MSSW = SSW/(n-c)
+
+F_stat = MSSB/MSSW
+print(F_stat)
+
+pf(F_stat,(c-1),(n-c),lower.tail = FALSE)
+
+#We reject the null hypothesis. We conclude that the mean heart rate is not the same for each of the three groups.
+
+```
+
+4.	To examine the effects of pets and friends in stressful situations, researchers recruited 45 people to participate in an experiment. Fifteen of the subjects were randomly assigned to each of three groups to perform a stressful  task alone (control group), with a good friend present, or with their dog present. Each subject's mean heart rate during the task was recorded. Test the appropriate hypotheses at the ?? = 0.05 level to decide if the mean heart rate differs between the groups.
+
+	      n	  Mean	  Std.Dev.
+Control	15	82.52	  9.24
+Pets	  15	73.48	  9.97
+Friends	15	91.325	8.34
+
+```{r}
+n_control = 15
+n_pets = 15
+n_frds = 15
+
+mean_control = 82.52
+mean_pets = 73.48
+mean_frds = 91.325
+
+std_control = 9.24
+std_pets = 9.97
+std_frds = 8.34
+
+n_4 = n_control + n_pets + n_frds # total no of observations
+c_4 = 3 # no of groups
+
+grand_mean_4 = (mean_control + mean_pets + mean_frds)/c
+
+SSB = (n_control*((mean_control - grand_mean_4)^2) + n_pets*((mean_pets - grand_mean_4)^2) + n_frds*((mean_pets - grand_mean_4)^2))
+SSW = (std_control^2)*(n_control-1) + (std_pets^2)*(n_pets-1) + (std_frds^2)*(n_frds-1)
+MSSB = SSB/(c_4-1)
+
+MSSW = SSW/(n_4-c_4)
+
+F_stat = MSSB/MSSW
+print(F_stat)
+
+pf(F_stat,(c_4-1),(n_4-c_4),lower.tail = FALSE)
+
+#Conclusion:
+#  We reject the null hypothesis. We conclude that the mean heart rate is not the
+# same for each of the three groups.
+
+```
+
+5.	An investigation carried out to study the toxic effects of mercury was described in the article "Comparative Responses of the Action of Different Mercury Compounds on Barley" (International Journal of Environmental Studies [1983]). Ten different concentrations of mercury were compared with respect to their effects  on  average dry weight (per 100 seven-day-old seedlings). The basic experiment was replicated 4 times for a total  of 40 observations. The article reported an ANOVA F statistic of 1.895. Using a significance level of 0.05, test the hypothesis that the true mean dry weight is the same for all 10 concentration levels.
+
+
+```{r}
+n = 40
+c = 10
+F_stat = 1.895
+
+pf(F_stat,(c-1),(n-c),lower.tail = FALSE)
+
+#Conclusion : There is not enough evidence to reject the null hypothesis. We cannot conclude that the mean dry weight is not the same for each of the concentration levels.
+
+```
+6.	High productivity and carbohydrate storage ability of the Jerusalem artichoke make it a promising agricultural crop. The article "Leaf Gas Exchange and Tuber Yield in Jerusalem Artichoke Cultivars"  (Field  Crops Research [1991]) reported on various plant characteristics. Consider the following data on chlorophyll concentration (in grams per square meter) for four varieties of Jerusalem artichoke:
+
+
+	        n	Mean	Std.Dev.
+Variety 1	5	0.3	  0.12
+Variety 2	5	0.24	0.089
+Variety 3	4	0.41	0.1
+Variety 4	6	0.33	0.054
+
+Do the data suggest that true average chlorophyll concentration depends on the variety? State and test the appropriate hypotheses at a level of 0.05.
+
+```{r}
+n_v1 = 5
+n_v2 = 5
+n_v3 = 4
+n_v4 = 6
+
+mean_v1 = 0.3
+mean_v2 = 0.24
+mean_v3 = 0.41
+mean_v4 = 0.33
+
+std_v1 = 0.12
+std_v2 = 0.089
+std_v3 = 0.1
+std_v4 = 0.054
+
+n_v = n_v1 + n_v2 + n_v3 + n_v4 # total no of observations
+c_v = 4 # no of groups
+
+grand_mean_v = (mean_v1 + mean_v2 + mean_v3 + mean_v4)/c_v
+
+SSB = n_v1*((mean_v1 - grand_mean_v)^2) + n_v2*((mean_v2 - grand_mean_v)^2) + n_v3*((mean_v3 - grand_mean_v)^2) + n_v4*((mean_v4 - grand_mean_v)^2)
+
+SSW = (std_v1^2)*(n_v1 -1) + (std_v2^2)*(n_v2 -1) + (std_v3^2)*(n_v3 -1) + (std_v4^2)*(n_v4 -1)
+
+MSSB = SSB/(c_v-1)
+MSSW = SSW/(n_v - c_v)
+
+F_stat = MSSB/MSSW
+print(F_stat)
+
+pf(F_stat,(c_v-1),(n_v-c_v),lower.tail = FALSE)
+
+# Conclusion: There is not enough evidence to reject the null hypothesis. We cannot conclude that the mean chlorophyll concentration depends on the variety
+```
+
