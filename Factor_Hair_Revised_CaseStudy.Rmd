@@ -1,0 +1,685 @@
+---
+title: "Factor_Hair_Revised_CaseStudy"
+author: "Deepti Lobo"
+date: "18 June 2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=FALSE, ind=1)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#1. Project Objective
+
+  The objective of the project is to use the dataset 'Factor-Hair-Revised.csv to build an optimum regression model to predict satisfaction. You are expected to 
+
+1.Perform exploratory data analysis on the dataset. Showcase some charts, graphs. Check for outliers and missing values.
+2.Is there evidence of multicollinearity ? Showcase your analysis.
+3.Perform  simple linear regression for the dependent variable with every independent variable.
+4.Perform PCA/Factor analysis by extracting 4 factors. Interpret the output and name the Factors.
+5.Perform Multiple linear regression with customer satisfaction as dependent variables and the four factors as independent variables. Comment on the Model output and validity. Your remarks should make it meaningful for everybody.
+
+```{r}
+#Setup the working directory
+setwd("D:/R-3.5.3/working_directory")
+getwd()
+
+#Import packages
+library(tidyverse)      
+library(ggplot2)   
+library(car)
+library(psych)          
+library(caTools)   
+library(MASS) 
+library(Metrics)
+library(purrr)
+library(tidyr)
+library(corrplot)
+
+#Read the Input File
+mydata = read.csv("Factor-Hair-Revised.csv",header = TRUE)
+#mydata1 = mydata
+attach(mydata)
+
+```
+
+#2. Exploratory Data Analysis(EDA)
+
+```{r}
+# Number of rows and columns
+print(paste("Number of rows = ",nrow(mydata),sep=""))
+print(paste("Number of columns = ",ncol(mydata),sep=""))
+
+# Names of the columns
+names(mydata)
+
+# Datatypes of the columns
+str(mydata)
+
+#Is any missing values ?
+anyNA(mydata)
+
+colSums(is.na(mydata))
+
+#Top 6 rows of the dataset
+head(mydata)
+
+#Bottom 6 rows of the dataset
+tail(mydata)
+
+```
+
+#3. Descriptive Statistics
+```{r}
+#Summary of the dataset
+summary(mydata)
+```
+```{r}
+#Ignore Non numeric and unwanted variables such as ID
+mydata = mydata[,-1]
+
+str(mydata)
+```
+
+#4. Data Visualization
+```{r}
+## Histogram of the independent Variables
+
+mydata %>% keep(is.numeric) %>% gather() %>% 
+    ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram()
+
+#Box Plot to see the Outliers in Continuous Variables.
+boxplot(mydata,main  = "Boxplot for Outliers" , las = 2)
+
+```
+
+#5. Check for correlation among variables
+  If one or more of the variables in a model are correlated, then the model may produce unstable parameter estimates with highly inflated standard errors, resulting in an overall significant model with no significant predictors. Therefore, we need to check, if a correlation exists among the variables.
+```{r}
+mydataCorr = cor(mydata)
+mydataCorr
+
+#Scatter Plot
+plot(mydata, main = "Scatter Plot")
+
+#Is there a correlation among the variables : Strength 
+corrplot(mydataCorr,method = "number")
+
+```
+
+  The correlation matrix ranges between -1 to +1. The data marked in red has negative correlation and the ones in blue have positive correlation. 
+  As we can see, a correlationship exists between the variables. For example, ECom has a correlation of 0.79  with SalesFImage, CompRes has a correlation of 0.87 with DelSpeed, etc. 
+  To check for multicollinearity in independent variables, we use VIF - Variable Inflation Factor.This measures the impact of collinearity among the variables in a regression model. The Variance Inflation Factor (VIF) is 1/Tolerance, it is always greater than or equal to 1.
+
+```{r}
+
+#We are considering the VIF values greater than 2.5 as having high multicollinearlity.
+
+#Full model,taking satisfaction as the dependent variable.
+
+full_model = lm(Satisfaction~., data = mydata)
+vif(full_model)
+
+```
+#Observation
+  The correlation matrix, along with the graphs, showed that correlation existed among the variables. The VIF  test shows, that multiple variables have the value greater than 2.5. With DelSpeed having the highest value of 6.516014.
+  We may conclude that this model is not good for regression  as multi-collinearity exists.
+  
+#6. Performing Simple Linear Regression
+  Linear regression models are used to show or predict the relationship between two variables or factors. The factor that is being predicted (the factor that the equation solves for) is called the dependent variable. The factors that are used to predict the value of the dependent variable are called the independent variables. Here Customer Satisfaction is being considered as the dependent variable for testing SLR.
+  The equation for calculation is Y = b0 + b1*X
+```{r}
+#SLR for ProdQual
+ProdQual_lm = lm(Satisfaction~ProdQual, data = mydata)
+summary(ProdQual_lm)
+
+#PLot the linear model (line of best fit)
+qplot(ProdQual,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 3.67593 + 0.41512 * ProdQual.
+   This means, an additional rating of 1 in Product Quality will raise the Satisfactio by 4.09. (i.e) Satifaction = 3.67593 + 0.41512 * 1 = 4.09105
+   The p-value of 2.901e-07 < 0.05 is highly significant.
+   The R2 is 0.2365 which is around 23.65%. It implies that 23.65% of the variation in the satisfaction is explained by the Product Quality.
+```{r}
+#SLR for Ecom
+Ecom_lm = lm(Satisfaction~Ecom, data = mydata)
+summary(Ecom_lm)
+
+#PLot the linear model (line of best fit)
+qplot(Ecom,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 5.1516 + 0.4811 * Ecom.
+   This means, an additional rating of 1 in E-Commerce will raise the Satisfactio by 5.63. (i.e) Satifaction = 5.1516 + 0.4811 * 1 = 5.6327
+   The p-value of 0.004368 < 0.05 is highly significant.
+   The R2 is 0.07994 which is around 7.99%. It implies that 7.99% of the variation in the satisfaction is explained by the E-Commerce.
+   
+```{r}
+#SLR for TechSup
+TechSup_lm = lm(Satisfaction~TechSup, data = mydata)
+summary(TechSup_lm)
+
+#PLot the linear model (line of best fit)
+qplot(TechSup,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 6.44757 + 0.08768 * TechSup.
+   This means, an additional rating of 1 in Technical Support will raise the Satisfaction by 6.54. (i.e) Satifaction = 6.44757 + 0.08768 * 1 = 6.53525
+   The p-value of 0.2647 > 0.05 is not highly significant.
+   The R2 is 0.01268 which is around 1.27%. It implies that 1.27% of the variation in the satisfaction is explained by the Technical Support.
+   
+```{r}
+
+#SLR for CompRes
+CompRes_lm = lm(Satisfaction~CompRes, data = mydata)
+summary(CompRes_lm)
+
+#PLot the linear model (line of best fit)
+qplot(CompRes,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 3.68005 + 0.59499 * CompRes.
+   This means, an additional rating of 1 in Complaint Resolution will raise the Satisfaction by 4.28. (i.e) Satifaction = 3.68005 + 0.59499 * 1 = 4.27504
+   The p-value of 3.085e-11 < 0.05 is highly significant.
+   The R2 is 0.3639 which is around 36.39%. It implies that 36.39% of the variation in the satisfaction is explained by the Complaint Resolution.
+   
+```{r}
+
+#SLR for Advertising
+Advertising_lm = lm(Satisfaction~Advertising, data = mydata)
+summary(Advertising_lm)
+
+#PLot the linear model (line of best fit)
+qplot(Advertising,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 5.6259 + 0.3222 * Advertising.
+   This means, an additional rating of 1 in Advertising will raise the Satisfaction by 5.95. (i.e) Satifaction = 5.6259 + 0.3222 * 1 = 5.9481,
+   The p-value of 0.002056 < 0.05 is highly significant.
+   The R2 is 0.09282 which is around 9.28%. It implies that 9.28% of the variation in the satisfaction is explained by the Advertising.
+   
+```{r}
+
+#SLR for ProdLine
+ProdLine_lm = lm(Satisfaction~ProdLine, data = mydata)
+summary(ProdLine_lm)
+
+#PLot the linear model (line of best fit)
+qplot(ProdLine,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 4.02203 + 0.49887 * ProdLine.
+   This means, an additional rating of 1 in Product Line will raise the Satisfaction by 4.52. (i.e) Satifaction = 4.02203 + 0.49887 * 1 = 4.5209,,
+   The p-value of 2.953e-09 < 0.05 is highly significant.
+   The R2 is 0.3031 which is around 30.31%. It implies that 30.31% of the variation in the satisfaction is explained by the Product Line.
+   
+```{r}
+
+#SLR for SalesFImage
+SalesFImage_lm = lm(Satisfaction~SalesFImage, data = mydata)
+summary(SalesFImage_lm)
+
+#PLot the linear model (line of best fit)
+qplot(SalesFImage,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 4.06983 + 0.55596 * SalesFImage.
+   This means, an additional rating of 1 in SalesForce Image will raise the Satisfaction by 4.63. (i.e) Satifaction = 4.06983 + 0.55596 * 1 = 4.62579,,
+   The p-value of 1.164e-07 < 0.05 is highly significant.
+   The R2 is 0.2502 which is around 25.02%. It implies that 25.02% of the variation in the satisfaction is explained by the SalesForce Image.
+   
+```{r}
+
+#SLR for ComPricing
+ComPricing_lm = lm(Satisfaction~ComPricing, data = mydata)
+summary(ComPricing_lm)
+
+#PLot the linear model (line of best fit)
+qplot(ComPricing,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 8.03856 + (-0.16068) * ComPricing.
+   This means, an additional rating of 1 in Competitive Pricing will raise the Satisfaction by 7.88. (i.e) Satifaction = 8.03856 + (-0.16068) * 1 = 7.87788,,
+   The p-value of 0.03756 < 0.05 is highly significant.
+   The R2 is 0.04339 which is around 4.34%. It implies that 4.34% of the variation in the satisfaction is explained by the Competitive Pricing.
+   
+```{r}
+
+#SLR for WartyClaim
+WartyClaim_lm = lm(Satisfaction~WartyClaim, data = mydata)
+summary(WartyClaim_lm)
+
+#PLot the linear model (line of best fit)
+qplot(WartyClaim,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 5.3581 + 0.2581 * WartyClaim
+   This means, an additional rating of 1 in Warranty & Claims will raise the Satisfaction by 5.62. (i.e) Satifaction = 5.3581 + 0.2581 * 1 = 5.6162,,,
+   The p-value of 0.0772 > 0.05 is not highly significant.
+   The R2 is 0.03152 which is around 3.15%. It implies that 3.15% of the variation in the satisfaction is explained by the Warranty & Claims.
+   
+```{r}
+
+#SLR for OrdBilling
+OrdBilling_lm = lm(Satisfaction~OrdBilling, data = mydata)
+summary(OrdBilling_lm)
+
+#PLot the linear model (line of best fit)
+qplot(OrdBilling,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 4.0541 + 0.6695 * OrdBilling
+   This means, an additional rating of 1 in Order & Billing will raise the Satisfaction by 5.62. (i.e) Satifaction = 4.0541 + 0.6695 * 1 = 5.6162,,,
+   The p-value of 2.602e-08 < 0.05 is highly significant.
+   The R2 is 0.2722 which is around 27.22%. It implies that 27.22% of the variation in the satisfaction is explained by the Order & Billing.
+   
+```{r}
+
+#SLR for DelSpeed
+DelSpeed_lm = lm(Satisfaction~DelSpeed, data = mydata)
+summary(DelSpeed_lm)
+
+#PLot the linear model (line of best fit)
+qplot(DelSpeed,Satisfaction,data= mydata) + stat_smooth(method="lm", col="red")
+
+```
+#Interpretation 
+   The estimated regression line equation, Satisfation  = 3.2791 + 0.9364 * DelSpeed.
+   This means, an additional rating of 1 in Delivery Speed will raise the Satisfaction by 4.22. (i.e) Satifaction = 3.2791 + 0.9364 * 1 = 4.2155,,,
+   The p-value of 3.3e-10 < 0.05 is highly significant.
+   The R2 is 0.333 which is around 33.3%. It implies that 33.3% of the variation in the satisfaction is explained by the Delivery Speed.
+   
+
+#Performing Multiple Linear Regression
+```{r}
+full_model = lm(Satisfaction~., data = mydata)
+summary(full_model)
+
+#Variable selection method
+forward_model = stepAIC(lm(Satisfaction~., data = mydata),direction = "forward")
+backward_model = stepAIC(lm(Satisfaction~., data = mydata),direction = "backward")
+both_model = stepAIC(lm(Satisfaction~., data = mydata),direction = "both")
+
+summary(forward_model) # Same as full model
+forward_model$anova    # Lowest AIC = -103.9097
+
+summary(backward_model) # ProdQual + Ecom + CompRes + ProdLine + SalesFImage + OrdBilling
+backward_model$anova    # Lowest AIC = -111.4983
+
+summary(both_model) #ProdQual + Ecom + CompRes + ProdLine + SalesFImage + OrdBilling
+both_model$anova   # Lowest AIC = -111.4983 
+
+```
+# Observation
+# The best variable selection method is backward and we will take the backward_model and predict with it. The STEPWISE BACKWARD MODEL evaluates stepwise the variables that do not contribute significantly to the analysis and eliminates them. The process starts with the full model, the dependent variable ( Satisfaction) will be compared with all others variables using the function ( lm ), the variable which presents the highest p value score should be eliminated, this process is repeated again and again until no further improvement is possible.
+#This model has given the lowest AIC of -111.4983.
+
+
+# Predicting using best model and measure performance
+```{r}
+# Split the observations into Training DataSet and Test Dataset of (70:30)
+set.seed(1)
+indices = sample(1:nrow(mydata), 0.7*nrow(mydata)) 
+trainDS = mydata[indices,] 
+testDS =  mydata[-indices,]
+nrow(trainDS)
+nrow(testDS)
+
+#Train the best regression model(backward variables) with trained Dataset
+trained_model = lm(Satisfaction~
+                     ProdQual + Ecom + CompRes + ProdLine + SalesFImage + OrdBilling, trainDS)
+
+summary(trained_model)
+
+#Rsquared for Train
+train_R2_Pref = summary(trained_model)$r.squared
+
+#Prediction : Trained
+pred_train_pca = predict(trained_model,trainDS)
+
+# PREDICT for TRAINS DATASET
+trainedPredSat = predict(trained_model, trainDS, type="response")
+
+#TRAIN : Model Performance
+mse_trained_perf = mse(trainDS$Satisfaction,trainedPredSat)
+rmse_trained_perf = sqrt(mse_trained_perf)
+
+# PREDICT for TEST DATASET : Predict the Customer Satisfaction based on trained model for test dataset
+predSat = predict(trained_model, testDS,type="response")
+
+#TEST : Model performance
+mse_test_perf = mse(testDS$Satisfaction,predSat)
+rmse_test_perf = sqrt(mse_test_perf)
+
+#Rsquared for Test
+cor(testDS$Satisfaction,predSat)^2
+
+#Observation : 
+#             TRAIN               TEST
+# R-SQRD      0.8047717           0.8088671    
+# RMSE        0.5373889           0.6215275 
+
+```
+
+```
+#Observation
+The R2 for Train is 0.8, whereas for Test is 0.8. This shows that there is no improvement in the R2 value. 
+The RMSE for Train is 0.54, whereas for Test is 0.62. This shows that the RMSE has increased for test. Hence we can say that we need to iprove the model furthur.
+
+
+# Assumption Checks for MLR
+
+## 1. Linearity : Independent variables should not be correlated with each other i.e. No multi-Colinear.
+## We need to understand if model has multi-collinearity, use VIF - Variable Inflation Factor
+```{r}
+#VIF is greater than 2.5, remove those variable
+#else take all varibale within 2
+
+#VIF = 1/(1-r) for every variable becomes dependent
+#Full model
+vif(full_model)
+
+```
+#Since multiple variables have a VIF score greater than 2.5, we can assume multicollinearity exists. This is not a well fitted model.
+
+
+
+### 2. Independence of Error : Or Auto-Correlation : Durbin Watson Test
+```{r}
+#If DW-Stat approach 0        : Residuals have POsitive Auto-corelation
+#If DW-Stat approch 2         : Residual have no auto-corelation
+#if DW-Stat greater than 2    : Negatively auto-corelated
+
+durbinWatsonTest(full_model)
+
+#Null Hypothsis : Residuals are auto-corelated
+#ALternate : Residuals are not NOT auo-corelated
+```
+#As we can see it is negatively correlated. It is having a p-value of 0.096 > 0.05. 
+
+
+### 3. Normality in Errors/Residuals : Shapiro Wilk test : BoxCox : Transformation
+```{r}
+#Shapiro wilk test : Before transformation : p > 0.05 is normal
+#ProdQual + Ecom + CompRes + ProdLine + SalesFImage + OrdBilling
+
+shapiro.test(Satisfaction) # normal
+shapiro.test(ProdQual) # not normal
+shapiro.test(Ecom) # not normal
+shapiro.test(CompRes) # normal
+shapiro.test(ProdLine) # normal
+shapiro.test(SalesFImage) # not normal
+shapiro.test(OrdBilling) # not normal
+
+```
+#As most of the variables are not normal, it is violating the normality. 
+
+```{r}
+# Common Box-Cox Transformations
+# Lambda value ()	Transformed data (Y')
+# -3.5 to -2.5      Y-3 = 1/Y3
+# -2.5 to -1.5      Y-2 = 1/Y2
+# -1.5 to 0.75      Y-1 = 1/Y1 (INverse)
+# -0.75 to -0.25    inverse sqrt =1/sqrt(y)
+# -0.25 to 0.25     natural log
+# 0.25 to 0.75       sqrt(Y)
+# 0.75 to 1.5       NOne (Y)
+# 1.5 to 2.5        Y2 = Y square
+# 2.5 >	            Y3
+
+install.packages("forecast")
+library(moments)
+library(forecast)
+#ProdQual + Ecom + CompRes + ProdLine + SalesFImage + OrdBilling
+lambda_Sat = BoxCox.lambda(Satisfaction) #0.2587586 == sqrt(Y)
+lambda_ProdQual=BoxCox.lambda(ProdQual) #1.999924 == Y square 
+lambda_Ecom=BoxCox.lambda(Ecom) #-0.02918471 == natural log
+lambda_CompRes=BoxCox.lambda(CompRes) #0.8856065 == None (Y)
+lambda_ProdLine=BoxCox.lambda(ProdLine) #0.6460062 == sqrt(Y) 
+lambda_SalesFImage=BoxCox.lambda(SalesFImage) #0.4146074 == sqrt(Y)
+lambda_OrdBilling=BoxCox.lambda(OrdBilling) # 1.666167== Y square
+
+#model based on transformation model_tr
+model_tr = lm(sqrt(Satisfaction)~
+                (ProdQual)^2+
+                log(Ecom)+
+                CompRes +
+                sqrt(ProdLine)+
+                sqrt(SalesFImage)+
+                OrdBilling ^2, data = mydata)
+summary(model_tr) ## increaed R2 
+summary(trained_model) ## based on best variable selection (backward)
+
+```
+#Shapiro wilk test : After transformation : p > 0.05 is normal
+
+
+### 4. Equal Variance : Homoscadisticity
+
+```{r}
+#Residual plot can without pattern suggest Equal Variance
+plot(sqrt(mydata$ProdQual),model_tr$residuals)
+plot(sqrt(mydata$Ecom),model_tr$residuals)
+plot(sqrt(mydata$CompRes),model_tr$residuals)
+plot(sqrt(mydata$ProdLine),model_tr$residuals)
+plot(sqrt(mydata$SalesFImage),model_tr$residuals)
+plot(sqrt(mydata$OrdBilling),model_tr$residuals)
+
+```
+
+# Assumption of Multi-colinearity
+  As the data shows signs of multi-colinearity, I have checked whether FA or PCA is required using KMO & bartlet test.
+
+```{r}
+# Kaiser-Meyer-Olkin (KMO) Test is a measure of how suited your data is for Factor Analysis. KMO returns values between 0 and 1.
+
+#KMO Test : 
+# 0.00 to 0.49 unacceptable.
+# 0.50 to 0.59 miserable.
+# 0.60 to 0.69 mediocre.
+# 0.70 to 0.79 middling.
+# 0.80 to 0.89 meritorious.
+# 0.90 to 1.00 marvelous.
+
+KMO(mydataCorr) 
+
+```
+#Obervation:
+# The Overall MSA =  0.66, the degree of common variance in our dataset is rather “mediocre”. We would need to do reduction.
+
+```{r}
+
+#Bartlett’s test for Sphericity compares the observed correlation matrix to the identity matrix. In other words, it checks if there is a redundancy between the variables that can be summarized with a few number of factors.
+
+cortest.bartlett(mydataCorr,n = nrow(mydata)) 
+
+```
+# Observation :
+# We reject the null hypothesis at the 5% level (p-value = 1.65971e-120 < 0.05). We can perform efficiently a PCA on our dataset.
+
+
+## Removing the dependent Variable Customer Satisfaction.
+
+```{r}
+
+#mydata$Satisfaction = NULL
+
+```
+
+#Performing PCA
+#  The eigenvalue is a measure of how much of the variance of the observed variables a factor explains.  Any factor with an eigenvalue ≥1 explains more variance than a single observed variable.
+```{r}
+#Eigen value computation
+PCACorr = cor(mydata[,-12])
+ev = eigen(PCACorr) #PCACorr has the correlation value for mydata
+print(ev,digits=5)
+
+EigenValue = ev$values
+EigenValue
+
+#Observaton : Based on Kaizer principal Eigen values > 1 can be considered as number of factors to consider. Here weare getting 4 factors.
+
+#Relative variance explained
+round((EigenValue/sum(EigenValue))*100,2)
+
+#Cummulative variance explained
+cumsum(round((EigenValue/sum(EigenValue))*100,2))
+
+#Scree plot : Elbow Method
+plot(EigenValue,col="blue",type="line",xlab = "Factors",ylab="EigenValues") #suggest 4 factors
+
+```
+
+#Finding number of Factors to consider
+# The blue line shows eigenvalues of actual data and the two red lines (placed on top of each other) show simulated and resampled data. Here we look at the large drops in the actual data and spot the point where it levels off to the right.
+
+```{r}
+
+parallel = fa.parallel(mydata, fm = 'minres', fa = 'fa') 
+
+library(psych)
+str(mydata)
+
+unrotated = principal(mydata[,-12], nfactors = 4, rotate = "none") 
+unrotated
+
+```
+#Observation: There are 4 factors, PC1, PC2, PC3 and PC4. The “SS loadings” row is the sum of squared loadings. This is used to determine the value of a particular factor. A factor is worth keeping if the SS loading is greater than 1. In this dataset, all are greater than 1. As we can see PC1 has the highest of 3.43 and the value reduces with every column. With PC4 having the lowest value of 1.09. The SS loading divided by the no of variables, gives us the proportion variation. PC1 has a variation of 31% and so on. The cumulatie variance adds the proportion variance, to give a total of 80%. In other words, 80% of the variation in the data is explained together by PC1, PC2, PC3 and PC4.
+
+```{r}
+fa.diagram(unrotated)
+unrotated_profile = plot(unrotated,row.names(unrotated$loadings))
+
+```
+# orthogonal 90 degree - A VARIMAX rotation is a change of coordinates used in principal component analysis (PCA) that maximizes the sum of the variances of the squared loadings. Thus, all the coefficients (squared correlation with factors) will be either large or near zero, with few intermediate values.
+
+```{r}
+
+rotated = principal(mydata[,-12], nfactors = 4, rotate = "varimax") 
+
+rotated 
+rotated$loadings
+
+```
+#Observation: There are 4 factors, PC1, PC2, PC3 and PC4. In this dataset, all are greater than 1. As we can see PC1 has the highest of 2.893 and the value reduces with every column. With PC4 having the lowest value of 1.774. PC1 has a variation of 26.3% and so on. The cumulatie variance adds the proportion variance, to give a total of 79.6%. In other words, 80% of the variation in the data is explained together by PC1, PC2, PC3 and PC4.
+
+```{r}
+
+# EIgen values has changed, more clear loading balancing, communality remains same
+fa.diagram(rotated)
+rotated_profile = plot(rotated,row.names(rotated$loadings),cex = 1.0)
+
+# Give profiled names to factors
+#RC1  = Sales_Distribution : RC2 = Marketing; RC3 = After_Sales_Service ; RC4 = Value_For_Money
+
+# Scores are the new dataset for regression again
+dim(rotated$scores)
+dim(mydata)
+
+## Create a new data.structure using scores for four factors and Target variable
+mydata_PCA = cbind(mydata[,12],rotated$scores)
+mydata_PCA = as.data.frame(mydata_PCA)
+View(mydata_PCA)
+names(mydata_PCA) = c("Satisfaction","Sales_Distribution","Marketing","After_Sales_Service","Value_For_Money")
+str(mydata_PCA)
+
+```
+
+## Lets again do a MLR with new datset
+```{r}
+
+#Model buiding
+set.seed(1)
+indices = sample(1:nrow(mydata_PCA), 0.7*nrow(mydata_PCA)) 
+trainDS_PCA = mydata_PCA[indices,] 
+testDS_PCA =  mydata_PCA[-indices,]
+
+nrow(trainDS_PCA)
+nrow(testDS_PCA)
+names(trainDS_PCA)
+
+```
+
+```{r}
+##Explore the data
+ggplot(trainDS_PCA, aes(Satisfaction)) + geom_density(fill = "blue")
+
+```
+
+```{r}
+#mLet us make the model
+final_model  = lm(Satisfaction~.,trainDS_PCA)
+summary(final_model) 
+
+```
+#Here F stat has a value of 26.74, which is greater than 1. Showing that there is a relationship between the predictors and response variable.
+#The p-value 3.941e-13 < 0.05, showing that the model is highly significant. From the summary, we can say that the After_Sales_Service is less significant, as the p-value is large for it. It may have to be removed, to get a better model.
+#The R2 closer to 1 indicates that the model explains the large value of the variance of the model and hence a good fit. In this case, the value is 0.622 (closer to 1) and hence the model is a good fit.
+
+```{r}
+par(mfrow=c(2,2))
+plot(final_model)
+
+```
+#Fitted vs Residual graph
+Residuals plots should be random in nature and there should not be any pattern in the graph. The average of the residual plot should be close to zero. From the above plot, we can see that the red trend line is almost near zero.
+#Normal Q-Q Plot
+Q-Q plot shows whether the residuals are normally distributed. Ideally, the plot should be on the dotted line. If the Q-Q plot is not on the line then models need to be reworked to make the residual normal. In the above plot, we see that most of the plots are on the line except at towards the end.
+#Scale-Location
+This shows how the residuals are spread and whether the residuals have an equal variance or not.
+#Residuals vs Leverage
+The plot helps to find influential observations. Here we need to check for points that are outside the dashed line. A point outside the dashed line will be influential point and removal of that will affect the regression coefficients.
+
+```{r}
+#MUlticollinearity check
+vif(final_model)
+```
+As we can observe, all the variables have a value less than 2.5. We can safely assume that thereis no muticollinearity present in this model.
+
+```{r}
+
+#Rsquared for Train
+train_R2 = summary(final_model)$r.squared
+
+#Prediction : Trained
+pred_train_pca = predict(final_model,trainDS_PCA)
+
+#trained performance
+mse_per_train_pca = mse(trainDS_PCA$Satisfaction,pred_train_pca)
+rmse_per_train_pca = sqrt(mse_per_train_pca)
+
+#Prediction : Test
+pred_test_pca = predict(final_model,testDS_PCA)
+
+#Test performance
+mse_per_test_pca = mse(testDS_PCA$Satisfaction,pred_test_pca)
+rmse_per_test_pca = sqrt(mse_per_test_pca)
+
+#Rsquared for Test
+cor(testDS_PCA$Satisfaction,pred_test_pca)^2
+
+```
+
+#Observation : 
+#             TRAIN               TEST
+# R-SQRD      0.6219858           0.7679074    
+# RMSE        0.7477758           0.5400406 
+
+
+#Conclusion
+The R2 for Train is 0.62, whereas for Test is 0.77. This shows that there is an improvement in the R2 value. As it is more closer to 1, we can say this is a best fit model.
+The RMSE for Train is 0.75, whereas for Test is 0.54. This shows that the RMSE has reduced for test. Hence we can say this is again an indication of a best fir model.
+The VIF scores are below 2.5 for all the independent variables.
+
+We can safely conclude that this is a best fit model.
