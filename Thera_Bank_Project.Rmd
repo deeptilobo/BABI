@@ -1,0 +1,776 @@
+---
+title: "There Project"
+author: "Deepti Lobo"
+date: "28 July 2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Objective
+  
+  This case is about a bank (Thera Bank) which has a growing customer base. Majority of these customers are liability customers (depositors) with varying size of deposits. The number of customers who are also borrowers (asset customers) is quite small, and the bank is interested in expanding this base rapidly to bring in more loan business and in the process, earn more through the interest on loans. In particular, the management wants to explore ways of converting its liability customers to personal loan customers (while retaining them as depositors). A campaign that the bank ran last year for liability customers showed a healthy conversion rate of over 9% success. This has encouraged the retail marketing department to devise campaigns with better target marketing to increase the success ratio with a minimal budget. The department wants to build a model that will help them identify the potential customers who have a higher probability of purchasing the loan. This will increase the success ratio while at the same time reduce the cost of the campaign. 
+  
+#About the Dataset
+
+  The dataset has data on 5000 customers. The data include customer demographic information (age, income, etc.), the customer's relationship with the bank (mortgage, securities account, etc.), and the customer response to the last personal loan campaign (Personal Loan). Among these 5000 customers, only 480 (= 9.6%) accepted the personal loan that was offered to them in the earlier campaign.
+
+```{r}
+#Set the directory
+setwd("D:/imp_doc/BABI/Data Mining/Thera project")
+getwd()
+
+#import the libraries
+library(readxl)
+library(psych)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(cluster)
+library(NbClust)
+library(rpart)    # for creating CART model
+library(rpart.plot)    # for creating CART model
+library(randomForest)  # for building random forest model
+library(ROCR)
+library(ineq)
+library(InformationValue)
+library(Rtsne)
+library(caret)
+
+#read the dataset
+theraDS = read_excel("Thera Bank_Personal_Loan_Modelling-dataset-1.xlsx", sheet = "Bank_Personal_Loan_Modelling")
+
+#attach the data
+attach(theraDS)
+
+```
+
+## Exploratory Data Analysis (EDA)
+```{r}
+#Class type of the DS
+class(theraDS)
+theraDS = as.data.frame(theraDS)
+
+#The no of rows and columns
+dim(theraDS)
+
+#Names of the columns
+names(theraDS)
+
+```
+
+#The attributes are divided into the below categories
+
+Nominal variables:
+
+ID - The customer's ID. This variable does not provide any useful insights. There is no correlation between the ID and the loan. We can neglect this variable for our model prediction.
+
+Zip Code -Home Address ZIP code.
+
+Ordinal variables:
+
+Family Members - Family size of the customer
+Education - The education Level of the customer. 1: Undergrad; 2: Graduate; 3: Advanced/Professional
+
+Interval variables:
+Age - Customer's age in years
+Experience - The years of professional experience of the customer.
+Income - The annual income of the customer ($000).
+CCAvg	- The avg. spending on credit cards per month ($000).
+Mortgage - The value of the house mortgage if any. ($000)
+
+Binary Variables:
+Personal Loan - Did this customer accept the personal loan offered in the last campaign? We will consider this as our target variable.
+Securities Account - Does the customer have a securities account with the bank?
+CD Account - Does the customer have a certificate of deposit (CD) account with the bank?
+Online - Does the customer use internet banking facilities?
+CreditCard - Does the customer use a credit card issued by the bank?
+
+```{r}
+#Rename the columns
+names(theraDS)[names(theraDS) == "Age (in years)"] = "Age"
+names(theraDS)[names(theraDS) == "Experience (in years)"] = "Experience"
+names(theraDS)[names(theraDS) == "Income (in K/month)"] = "Income"
+names(theraDS)[names(theraDS) == "ZIP Code"] = "ZIP_Code"
+names(theraDS)[names(theraDS) == "Family members"] = "Family_members"
+names(theraDS)[names(theraDS) == "Personal Loan"] = "Personal_Loan"
+names(theraDS)[names(theraDS) == "Securities Account"] = "Securities_Account"
+names(theraDS)[names(theraDS) == "CD Account"] = "CD_Account"
+
+names(theraDS)
+
+```
+```{r}
+#Display the first six rows
+head(theraDS)
+
+#Is there any values missing?
+anyNA(theraDS)
+
+colSums(is.na(theraDS))
+
+```
+
+The attribute Family Members has 18 NA's. For better analysis, we will be updating this column as 0. Assuming that, family size as 0 means, the person has no dependent and 1 means, he has a single dependent and so on.
+
+```{r}
+theraDS$Family_members = replace(as.numeric(theraDS$Family_members),is.na(theraDS$Family_members),0)
+```
+#Descriptive Analysis
+```{r}
+#Data types of all the columns
+str(theraDS)
+
+#changing Education,CreditCard, Securities_Account, CD_Account, Online and Personal_Loan as a factor.
+theraDS$Education = as.factor(theraDS$Education)
+theraDS$Personal_Loan = as.factor(theraDS$Personal_Loan)
+theraDS$CreditCard = as.factor(theraDS$CreditCard)
+theraDS$Securities_Account = as.factor(theraDS$Securities_Account)
+theraDS$CD_Account = as.factor(theraDS$CD_Account)
+theraDS$Online = as.factor(theraDS$Online)
+
+#Data types of all the columns
+str(theraDS)
+
+#summary of the dataset
+summary(theraDS)
+
+#ID, ZIP Code, Family members, Education, Credit Card, Securities Account, CD Account, Online and Personal loan columns have not be considered.
+##Summary Satatistics Measure of central tendency and dispersion (Univariate Analysis)
+##(count,missing value,mean,0.01,0.05,0.10,0.25,Median,0.75,0.90,0.95,0.99,min,max,range,skew,kurtosis,SD,IQR) for continous variable
+describe(theraDS[,c(2,3,4,7,9)],na.rm = TRUE,
+         quant = c(0.01,0.05,0.10,0.25,0.75,0.90,0.95,0.99),IQR=TRUE,check=TRUE)
+
+```
+#Data Visualization
+
+```{r}
+#Univariate Analysis:
+#Removing ID and Zip Code from the plot
+
+#Histogram for numerical variables
+
+theraDS[,-c(1,5)] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+
+```
+#Observation
+Age - Is normally distributed. The majority of the customers fall between the age group of 30 to 60 yrs.
+CCAvg - Is positively skewed with the spending ranging from 0 to 10K. The majority of the spending is less than 2.5K.
+Experience - Is normally distributed with an average experience of 20yrs. The min experience shows as -3yrs. This could be a data input error, as the experience cannot be negative and it needs to be corrected.
+Income - Is positively skewed, with an average income of 73K and max income of 224K.
+Mortgage - The 50% of the customers have a mortgage of less then 56K. The max mortgage being of 635K.
+
+Family_members are evenly distributed.
+
+CD_Account, CreditCard, Online, Personal_Loan and Securities_Account have binary values of 1 and 0.
+
+```{r}
+##Frequency distribution for categorical variable (Univariate Analysis)
+
+table(theraDS[,c(8)]) #Education
+table(theraDS[,c(10)]) #Personal Loan
+table(theraDS[,c(11)]) #Securties Accoun
+table(theraDS[,c(12)]) #CD Account
+table(theraDS[,c(13)]) #Online
+table(theraDS[,c(14)]) #Credit Card
+```
+
+```{r}
+#Count of customers having negative experience.
+sum(theraDS$Experience < 0)
+
+#Education Vs Experience
+aggregate(theraDS$Experience, list(theraDS$Education), mean)
+
+```
+As we can see, there is no much difference in the average of experience based on the education.
+
+```{r}
+#Age Vs Experience
+age_exp = aggregate(theraDS$Experience, list(theraDS$Age), mean)
+
+tail(age_exp)
+
+head(age_exp)
+
+qplot(age_exp$Group.1, age_exp$x, data = age_exp,
+      main = "Age against Average Experience",
+      xlab = "Age",
+      ylab = "Average Experience")
+
+```
+
+As we can see Experience is linearly proportional to Age.
+```{r}
+negExp = theraDS[(theraDS$Experience < 0),]
+head(negExp[,2:3])
+tail(negExp[,2:3])
+
+qplot(negExp$Age, negExp$Experience, data = negExp,
+      main = "Age against Experience",
+      xlab = "Age",
+      ylab =  "Experience")
+
+```
+
+As we can see the negative range of experience, ranges from 23 to 29 yrs and has the values of -1, -2 and -3. We have seen that experience increases with age. Therefore, we can assume that the negative experience was a data entry error and take its absolute value.
+
+```{r}
+theraDS$Experience = abs(theraDS$Experience)
+
+sum(theraDS$Experience < 0)
+
+summary(theraDS)
+
+```
+
+
+```{r}
+#Boxplot:
+
+par(mfrow = c(2,3)) #reset plotting space
+
+sampleDS = theraDS[,c(2,3,4,6,7,9)]
+
+for(i in 1:length(sampleDS)) {
+    boxplot(sampleDS[,i], main = names(sampleDS[i]), col = "blue", type = "l")
+}
+
+```
+The boxplot shows that Income, CCAvg and Mortgage has outliers.
+
+```{r}
+##Applying flooring and capping on all continous variables. Here we are using 1 and 99 percentile for outlier treatment on  Income, CCAVG and Mortgage.
+
+theraDS[,9] = ifelse(theraDS[,9]>=quantile(theraDS[,c(9)],0.99),quantile(theraDS$Mortgage,0.99),theraDS[,9])
+theraDS[,4] = ifelse(theraDS[,4]>=quantile(theraDS[,c(4)],0.99),quantile(theraDS$Income,0.99),theraDS[,4])
+theraDS[,7] = ifelse(theraDS[,7]>=quantile(theraDS[,c(7)],0.99),quantile(theraDS$CCAvg,0.99),theraDS[,7])
+
+summary(theraDS)
+```
+Post the outlier treatment, if we see the summary. The max of Income has changed from 224 to 193. Similarly the max of CCAVG has changed from 10 to 8. The max Mortgage has changed  from 635 to 431.01.
+
+```{r}
+#Bivariate Analysis:
+
+pairs.panels(theraDS[,-1], 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             ) 
+
+```
+
+
+```{r}
+##correlation between continous variables (Bivariate Analysis)
+round(cor(theraDS[,c(2,3,4,6,7,9)]),2)
+
+```
+
+```{r}
+mydataCorr = cor(sampleDS)
+
+#Is there a correlation among the variables
+corrplot(mydataCorr,method = "number")
+
+```
+From the graph we can see that Experience and Age are highly correlated. CCAvg and Income are also correlated.
+
+```{r}
+##Chi Square test for categorical Variable (Bivariate Analysis)
+chisq.test(theraDS[,8],theraDS[,10]) #Education and Personal loan
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(theraDS[,8],theraDS[,11]) #Education and Security Account
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,8],theraDS[,12]) #Education and CD Account
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,8],theraDS[,13]) #Education and Online 
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,8],theraDS[,14]) #Education and Credit Card
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,10],theraDS[,11]) #Personal loan and Security Account
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,10],theraDS[,12]) #Personal loan and CD Account
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(theraDS[,10],theraDS[,13]) #Personal loan and Online 
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,10],theraDS[,14]) #Personal loan and Credit Card
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,11],theraDS[,12]) #Security Account and CD Account
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(theraDS[,11],theraDS[,13]) #Security Account and Online
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,11],theraDS[,14]) #Security Account and Credit Card
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(theraDS[,12],theraDS[,13]) #CD Account and Online
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(theraDS[,12],theraDS[,14]) #CD Account and Credit Card
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(theraDS[,13],theraDS[,14]) #Online and Credit Card
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+```
+
+#Clustering
+As this is a mixed dataset [i.e] it consists of numerical and categorical variables, we are using two step clustering. Using Gower for scaling the dataset. 
+```{r}
+#Data is scaled for normalization for continuous variables
+clust.scaled = scale(theraDS[,-c(1,8,10,11,12,13,14)])
+
+#sd is scaled to 1 and mean to 0
+apply(clust.scaled, 2, mean)
+apply(clust.scaled, 2, sd)
+
+#creating a different data set for categorical variables
+clust1.scaled = theraDS[,c(8,10,11,12,13,14)]
+
+#combining both the tables
+cluster = cbind(clust.scaled,clust1.scaled)
+head(cluster)
+
+```
+```{r}
+#distance calculation using daisy
+gower.dist <- daisy(cluster, metric = c("gower"))
+gower_mat = as.matrix(gower.dist)
+
+class(gower.dist)
+summary(gower.dist)
+```
+```{r}
+#Dendrogram to plot the cluster
+aggl.clust.c <- hclust(gower.dist, method = "complete")
+plot(aggl.clust.c,
+     main = "Agglomerative, complete linkages")
+
+
+gower_mat = as.matrix(gower.dist)
+```
+
+```{r}
+
+sil_width = c(NA)
+for(i in 2:8){  
+  pam_fit <- pam(gower.dist, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+```{r}
+#8 clusters has the highest silhouette width. 7 is simpler and almost as good. Let's pick k = 7
+
+k <- 7
+pam_fit <- pam(gower.dist, diss = TRUE, k)
+pam_results <- cluster %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+pam_results$the_summary
+
+```
+```{r}
+tsne_obj <- Rtsne(gower.dist, is_distance = TRUE)
+tsne_data <- tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(pam_fit$clustering))
+ggplot(aes(x = X, y = Y), data = tsne_data) +
+  geom_point(aes(color = cluster))
+
+
+```
+
+8 clusters has the highest silhouette width. 7 is simpler and almost as good. Let's pick k = 7
+
+```{r}
+## Spliting the dataset into train and test for development and out of sample testing respectively
+seed = 1000
+set.seed(seed)
+
+#Removing the cluster column
+theraIndex <- sample(1:nrow(theraDS[,]),0.70*nrow(theraDS[,]))
+
+CARTtrain <- theraDS[theraIndex,]
+CARTtest <- theraDS[-theraIndex,]
+
+str(theraDS)
+```
+CART Model
+
+```{r}
+## Calculate the response rate
+sum(CARTtrain$Personal_Loan == "1")/nrow(CARTtrain)
+
+##Check top 5 observation of train dataset
+head(CARTtrain)
+
+```
+Only 9% of the dataset has the value as 1 [i.e] only 9% has opted for personal loan. This is an imbalanced dataset.
+
+```{r}
+##Build first CART model
+tree = rpart(formula = Personal_Loan ~ .,data=CARTtrain,method="class",minbucket = 10,cp=0)
+tree
+```
+We have choosen classification model. with minbucket as 10, so that role bak happens at that level and the cp is 0, so that the tree grows till the end.
+
+From the tree we can see that Income got the highest Gini Gain.
+
+```{r}
+##Plot tree
+rpart.plot(tree)
+```
+The tree has been divided based on the income <114. The tree is furthur divided bassed on CCAvg <3 and Eductaion <2.
+```{r}
+##Print cp value
+printcp(tree)
+
+```
+The tree has a misclassification rate of 0.091429 * 0.13750 * 100% = 1.26% in cross-validation (i.e. 98.74% of prediction accuracy). Now theis tree can be used to produce confusion matrices and tree structure plots.
+
+The cross validation error is reducting and we can see that the least value is, 0.13750. The CP value corresponding to this is, 0.000000.
+
+```{r}
+##Plot cp value
+plotcp(tree)
+```
+```{r}
+#Pruning the tree
+bestcp = tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
+
+bestcp
+
+#as the bestcp has returned 0, we will take the value above it 
+ptree = prune(tree,cp=0.012500,"CP")
+
+ptree
+```
+As we can see the CP value was 0.00, purning was not required. We have still gone ahead and done it. We  can see that there is no difference between the pruned and original tree.
+
+```{r}
+##check the updated tree
+##plot tree
+rpart.plot(ptree)
+```
+```{r}
+##print cp value
+printcp(ptree)
+```
+```{r}
+
+ptree_df = summary(ptree)
+barchart(ptree_df$variable.importance)
+```
+
+```{r}
+##Use this tree to do the prediction on train as well as test data set
+CARTtrain$CART.Pred = predict(ptree,data=CARTtrain,type="class")
+CARTtrain$CART.Score = predict(ptree,data=CARTtrain,type="prob")[,"1"]
+
+CARTtest$CART.Pred = predict(ptree,CARTtest,type="class")
+CARTtest$CART.Score = predict(ptree,CARTtest,type="prob")[,"1"]
+
+```
+
+Random Forest Model
+```{r}
+set.seed(seed)
+
+index <- sample(1:nrow(theraDS),0.70*nrow(theraDS))
+RFtrain <- theraDS[index,-c(15)]
+RFtest <- theraDS[-index,-c(15)]
+
+RFtrain <- theraDS[index,]
+RFtest <- theraDS[-index,]
+
+```
+```{r}
+ncol(RFtrain)
+sqrt(14)
+
+##Build the first RF model
+Rforest = randomForest(Personal_Loan ~ .,data=RFtrain,importance=TRUE)
+
+##Print the model to see the OOB and error rate
+print(Rforest)
+```
+Out of Bag (OOB) error is 1.31%. 
+```{r}
+##Plot the RF to know the optimum number of trees
+plot(Rforest)
+```
+#Observation : after 50 tress the OOB has plateued, so optimum tree can be 50.
+After 100 trees the OB has platued, so optimum trees can be 100.
+
+```{r}
+##Tune up the RF model to find out the best mtry
+set.seed(seed)
+
+#The ID and dependent variable, personal loan must be removed from the x-axis
+tRforest = tuneRF(x=RFtrain[,-c(1,10)],
+                  y=RFtrain$Personal_Loan,
+                  mtrystart = 10,
+                  stepfactor=1.5,
+                  ntree=100,
+                  improve=0.0001,
+                  nodesize=10,
+                  trace=TRUE,
+                  plot=TRUE,
+                  doBest=TRUE,
+                  importance=TRUE)
+
+```
+We can see that the OOB error is least for 6 mtry.
+```{r}
+##Build the refined RF model
+Rforest = randomForest(Personal_Loan~.,data=RFtrain,ntree=100,mtry=6,nodesize=10,importance=TRUE)
+
+##Print the model to see the OOB and error rate
+print(Rforest)
+
+```
+#The error rate has improved from 1.31% to 1.23%. There is no significant improvement.
+```{r}
+##Identify the importance of the variables
+temp = as.data.frame(importance(Rforest))
+temp$VariableNames = names(importance(Rforest))
+
+temp %>% arrange(desc(MeanDecreaseGini))
+
+```
+If we check the MeanDecreaseGini, 
+Income has the highest value of 177.02
+Education has the value of 99.01
+CCAvg has a value of 79.47.
+Family members has a value of 56.2
+
+```{r}
+##Use this tree to do the prediction on train as well as test data set
+RFtrain$RF.Pred = predict(Rforest,data=RFtrain,type="class")
+RFtrain$RF.Score = predict(Rforest,data=RFtrain,type="prob")[,"1"]
+
+RFtest$RF.Pred = predict(Rforest,RFtest,type="class")
+RFtest$RF.Score = predict(Rforest,RFtest,type="prob")[,"1"]
+
+#View(RFtest[,c(10,15,16)])
+```
+Performance Measure Parameters
+```{r}
+##Performance related  paramters like KS, ROC, AUC, Concordance, discordance and gini
+
+#Let us create a dataframe to keep on the Model performance stats
+Model_Perf = data.frame(matrix(NA, nrow = 4, ncol=10))
+dim(Model_Perf)
+
+names(Model_Perf) = c("ModelName","Sample","KS","AUC","GINI","CONCORDANCE",
+                      "ACCURACY","SENSITIVITY","SPECIFICITY","CLASS_ERROR")
+
+## CART Model
+Model_Perf[1,1] = "CART"
+Model_Perf[2,1] = "CART"
+Model_Perf[1,2] = "TRAIN"
+Model_Perf[2,2] = "TEST"
+
+```
+
+```{r}
+predobjtrain = prediction(CARTtrain$CART.Score,CARTtrain$Personal_Loan)
+preftrain = performance(predobjtrain,"tpr","fpr")
+
+#ROC Curve
+plot(preftrain)
+
+```
+
+```{r}
+predobjtest = prediction(CARTtest$CART.Score,CARTtest$Personal_Loan)
+preftest = performance(predobjtest,"tpr","fpr")
+plot(preftest)
+
+```
+```{r}
+## KS - Train & Test
+Model_Perf[1,3] = max(preftrain@y.values[[1]]-preftrain@x.values[[1]])
+Model_Perf[2,3] = max(preftest@y.values[[1]]-preftest@x.values[[1]])
+
+```
+
+```{r}
+##AUC - Train & Test
+auctrain=performance(predobjtrain,"auc")
+Model_Perf[1,4] = as.numeric(auctrain@y.values)
+
+auctest=performance(predobjtest,"auc")
+Model_Perf[2,4] =as.numeric(auctest@y.values)
+
+```
+
+```{r}
+##gini- Train & Test
+Model_Perf[1,5] =ineq(CARTtrain$CART.Score,"gini")
+Model_Perf[2,5] =ineq(CARTtest$CART.Score,"gini")
+
+```
+
+```{r}
+##Concordance- Train & Test
+Model_Perf[1,6] =Concordance(actuals=CARTtrain$Personal_Loan,predictedScores = CARTtrain$CART.Score)[1]
+Model_Perf[2,6] =Concordance(actuals=CARTtest$Personal_Loan,predictedScores = CARTtest$CART.Score)[1]
+
+```
+
+```{r}
+## RF Model
+
+Model_Perf[3,1] = "RANDOM_FOREST"
+Model_Perf[4,1] = "RANDOM_FOREST"
+Model_Perf[3,2] = "TRAIN"
+Model_Perf[4,2] = "TEST"
+
+```
+
+```{r}
+predobjtrain = prediction(RFtrain$RF.Score,RFtrain$Personal_Loan)
+preftrain = performance(predobjtrain,"tpr","fpr")
+plot(preftrain)
+```
+```{r}
+predobjtest = prediction(RFtest$RF.Score,RFtest$Personal_Loan)
+preftest = performance(predobjtest,"tpr","fpr")
+plot(preftest)
+
+```
+```{r}
+##KS
+Model_Perf[3,3] = max(preftrain@y.values[[1]]-preftrain@x.values[[1]])
+Model_Perf[4,3] = max(preftest@y.values[[1]]-preftest@x.values[[1]])
+
+```
+
+```{r}
+##AUC
+auctrain=performance(predobjtrain,"auc")
+Model_Perf[3,4] =as.numeric(auctrain@y.values)
+
+auctest=performance(predobjtest,"auc")
+Model_Perf[4,4] =as.numeric(auctest@y.values)
+
+```
+```{r}
+##gini
+Model_Perf[3,5] =ineq(RFtrain$RF.Score,"gini")
+Model_Perf[4,5] =ineq(RFtest$RF.Score,"gini")
+
+```
+```{r}
+##Concordance
+Model_Perf[3,6] =Concordance(actuals=RFtrain$Personal_Loan,predictedScores = RFtrain$RF.Score)[1]
+Model_Perf[4,6] =Concordance(actuals=RFtest$Personal_Loan,predictedScores = RFtest$RF.Score)[1]
+
+#print(Model_Perf, digits = 3)
+```
+Confusion Matrix
+
+```{r}
+## CART Model Confusion Matrix
+CART_CM_train = table(CARTtrain$Personal_Loan,CARTtrain$CART.Pred)
+CART_CM_test = table(CARTtest$Personal_Loan,CARTtest$CART.Pred)
+
+```
+```{r}
+##Accuracy
+Model_Perf[1,7]=(CART_CM_train[1,1]+CART_CM_train[2,2])/nrow(CARTtrain)
+Model_Perf[2,7]=(CART_CM_test[1,1]+CART_CM_test[2,2])/nrow(CARTtest)
+
+```
+```{r}
+##Sensitivity
+Model_Perf[1,8]=(CART_CM_train[2,2])/(CART_CM_train[2,2]+CART_CM_train[2,1])
+Model_Perf[2,8]=(CART_CM_test[2,2])/(CART_CM_test[2,2]+CART_CM_test[2,1])
+
+```
+```{r}
+##Specificity
+Model_Perf[1,9]=(CART_CM_train[1,1])/(CART_CM_train[1,1]+CART_CM_train[2,1])
+Model_Perf[2,9]=(CART_CM_test[1,1])/(CART_CM_test[1,1]+CART_CM_test[2,1])
+```
+
+```{r}
+## Error Rate
+Model_Perf[1,10]=(CART_CM_train[1,2]+CART_CM_train[2,1])/nrow(CARTtrain)
+Model_Perf[2,10]=(CART_CM_test[1,2]+CART_CM_test[2,1])/nrow(CARTtest)
+
+```
+```{r}
+## RF Model : Confusion Metrix
+RF_CM_train = table(RFtrain$Personal_Loan,RFtrain$RF.Pred)
+RF_CM_test = table(RFtest$Personal_Loan,RFtest$RF.Pred)
+
+```
+```{r}
+##Accuracy
+Model_Perf[3,7]=(RF_CM_train[1,1]+RF_CM_train[2,2])/nrow(RFtrain)
+Model_Perf[4,7]=(RF_CM_test[1,1]+RF_CM_test[2,2])/nrow(RFtest)
+
+```
+```{r}
+##Sensitivity
+Model_Perf[3,8]=(RF_CM_train[2,2])/(RF_CM_train[2,2]+RF_CM_train[2,1])
+Model_Perf[4,8]=(RF_CM_test[2,2])/(RF_CM_test[2,2]+RF_CM_test[2,1])
+
+```
+```{r}
+##Specificity
+Model_Perf[3,9]=(RF_CM_train[1,1])/(RF_CM_train[1,1]+RF_CM_train[2,1])
+Model_Perf[4,9]=(RF_CM_test[1,1])/(RF_CM_test[1,1]+RF_CM_test[2,1])
+```
+
+```{r}
+## Error Rate
+Model_Perf[3,10]=(RF_CM_train[1,2]+RF_CM_train[2,1])/nrow(RFtrain)
+Model_Perf[4,10]=(RF_CM_test[1,2]+RF_CM_test[2,1])/nrow(RFtest)
+
+```
+```{r}
+print(Model_Perf,digits = 4)
+```
+
+
