@@ -1,0 +1,911 @@
+---
+title: "CellPhone"
+author: "Deepti Lobo"
+date: "3 September 2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Objective
+
+Customer Churn is a burning problem for Telecom companies. In this project, we simulate one such case of customer churn where we work on a data of postpaid customers with a contract. The data has information about the customer usage behavior, contract details and the payment details. The data also indicates which were the customers who canceled their service. Based on this past data, we need to build a model which can predict whether a customer will cancel their service in the future or not.
+
+```{r}
+#Set the workig directory
+setwd("D:/imp_doc/BABI/Predictive Modelling/Project/")
+getwd()
+
+#Import the libraries
+library(readxl)
+library(psych)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(corrplot)
+library(car)
+library(MASS) 
+library(caTools)
+library(pscl)
+library(lmtest)
+library(ROCR)
+library(blorr) # to build and validate binary logistic models
+library(gmodels) #library for plotting
+library(class)
+library(datasets)
+library(naivebayes)
+library(e1071)
+library(kknn)      # KNN
+library(klaR)      # For Naive Bayes
+library(mlbench)
+library(caret)
+library(LiblineaR)
+library(gains)
+
+#install.packages("naivebayes")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+#Read the dataset
+cellphone = read_excel("Cellphone.xlsx", sheet = "Data")
+
+#Class type of the DS
+class(cellphone)
+cellphone = as.data.frame(cellphone)
+
+#The no of rows and columns
+dim(cellphone)
+
+#Names of the columns
+names(cellphone)
+```
+
+```{r}
+#Display the first six rows
+head(cellphone)
+```
+```{r}
+#Is there any values missing?
+anyNA(cellphone)
+```
+#Descriptive Analysis
+
+```{r}
+#Data types of all the columns
+str(cellphone)
+```
+```{r}
+#Converting Churn,Contract Renewal, Data Plan into factors.
+cellphone$Churn = as.factor(cellphone$Churn)
+cellphone$ContractRenewal = as.factor(cellphone$ContractRenewal)
+cellphone$DataPlan = as.factor(cellphone$DataPlan)
+cellphone$CustServCalls = as.factor(cellphone$CustServCalls)
+
+str(cellphone)
+
+```
+Attribute Details
+
+Binary Variables:
+Churn - 1 if customer cancelled service, 0 if not. About 85% have not cancelled, while only 15% have cancelled the services.
+Contract Renewal - 1 if customer recently renewed contract, 0 if not. Around 90% of the customers have renewed the contract, while 10% haven't.
+Data Plan - 1 if customer has data plan, 0 if not. Only 28% have taken the data plan, while the remaining 72% haven't taken any plan.
+
+Interval variables:
+AccountWeeks - Number of weeks customer has had active account. The least active account was for 1 week. The highest was for 243 weeks. While the average was 101 weeks.
+DataUsage	 - Gigabytes of monthly data usage. The max monthly usage was 5.4GH while average usage was only 0.8GH.
+DayMins -	Average daytime minutes per month. The max was around 350 min while min was 0. With an average of 79.8 min.
+DayCalls -	Average number of daytime calls. Average calls made was 100 with the max upto 165 calls.
+MonthlyCharge	- Average monthly bill. Max monthly charges was 111 while the min was 14.
+OverageFee - Largest overage fee in last 12 months. The largest fee was 18.19 while the average was 10.05.
+RoamMins - Average number of roaming minutes. Max roaming min was 20 min while the average was 10.24 min.
+
+Ordinal variables:
+CustServCalls	- Number of calls into customer service. The highest no of cutomers of around 1181 have done only 1 call to the customer service. While around 35 have done more than 6 calls, with 9 number of calls by any customer being the highest.
+
+```{r}
+summary(cellphone)
+```
+
+```{r}
+##Summary Satatistics Measure of central tendency and dispersion (Univariate Analysis)
+describe(cellphone[,-c(1,3,4,6)],na.rm = TRUE,
+         quant = c(0.01,0.05,0.10,0.25,0.75,0.90,0.95,0.99),IQR=TRUE,check=TRUE)
+```
+#Univariate Analysis:
+```{r}
+#Histogram for numerical variables
+cellphone[] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+```
+Account Weeks, Day Calls, Day Mins, Average Fee and Roam Mins have a normal distribution.
+Monthly Charge has a slightly right skwed distribution.
+Data Usage shows that majority of the people do not use the data but the ones who use has a normal distribution.
+```{r}
+# Compute percentages
+##Frequency distribution for categorical variable (Univariate Analysis)
+
+churny = table(cellphone[,c(1)]) #Churn
+
+# Create test data.
+churny <- data.frame(
+  category=c("0", "1"),
+  count=c(2850, 483)
+)
+# Compute percentages
+churny$fraction <- churny$count / sum(churny$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+churny$ymax <- cumsum(churny$fraction)
+
+# Compute the bottom of each rectangle
+churny$ymin <- c(0, head(churny$ymax, n=-1))
+
+# Compute label position
+churny$labelPosition <- (churny$ymax + churny$ymin) / 2
+
+# Compute a good label
+churny$label <- paste0(churny$category, "\n value: ", churny$count)
+
+# Make the plot
+ggplot(churny, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  ggtitle("Plot for Churn") +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=3) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+
+
+```
+From the plot we can see that about 85% have not cancelled, while only 15% have cancelled the services.
+
+```{r}
+contRen = table(cellphone[,c(3)]) #Contract Renewal
+
+# Create test data.
+contRen <- data.frame(
+  category=c("0", "1"),
+  count=c(323, 3010)
+)
+# Compute percentages
+contRen$fraction <- contRen$count / sum(contRen$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+contRen$ymax <- cumsum(contRen$fraction)
+
+# Compute the bottom of each rectangle
+contRen$ymin <- c(0, head(contRen$ymax, n=-1))
+
+# Compute label position
+contRen$labelPosition <- (contRen$ymax + contRen$ymin) / 2
+
+# Compute a good label
+contRen$label <- paste0(contRen$category, "\n value: ", contRen$count)
+
+# Make the plot
+ggplot(contRen, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  ggtitle("Plot for Contract Renewal") +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=3) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+From the graph we can see that around 90% of the customers have renewed the contract, while 10% haven't.
+
+```{r}
+
+dataPlan = table(cellphone[,c(4)]) #Data Plan
+
+# Create test data.
+dataPlan <- data.frame(
+  category=c("0", "1"),
+  count=c(2411, 922)
+)
+# Compute percentages
+dataPlan$fraction <- dataPlan$count / sum(dataPlan$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+dataPlan$ymax <- cumsum(dataPlan$fraction)
+
+# Compute the bottom of each rectangle
+dataPlan$ymin <- c(0, head(dataPlan$ymax, n=-1))
+
+# Compute label position
+dataPlan$labelPosition <- (dataPlan$ymax + dataPlan$ymin) / 2
+
+# Compute a good label
+dataPlan$label <- paste0(dataPlan$category, "\n value: ", dataPlan$count)
+
+# Make the plot
+ggplot(dataPlan, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  ggtitle("Plot for Data Plan") +
+  geom_rect() +
+  geom_label( x=3.5, aes(y=labelPosition, label=label), size=6) +
+  scale_fill_brewer(palette=3) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+From the graph we can see that only 28% have taken the data plan, while the remaining 72% haven't taken any plan.
+```{r}
+custSerCalls = table(cellphone[,c(6)]) #Customer Service Calls
+
+# Create test data.
+custSerCalls <- data.frame(
+  category=c("0", "1","2","3","4","5","6","7","8","9"),
+  count=c(697, 1181, 759, 429, 166, 66, 22, 9,2,2)
+)
+# Compute percentages
+custSerCalls$fraction <- custSerCalls$count / sum(custSerCalls$count)
+
+# Compute the cumulative percentages (top of each rectangle)
+custSerCalls$ymax <- cumsum(custSerCalls$fraction)
+
+# Compute the bottom of each rectangle
+custSerCalls$ymin <- c(0, head(custSerCalls$ymax, n=-1))
+
+# Compute label position
+custSerCalls$labelPosition <- (custSerCalls$ymax + custSerCalls$ymin) / 2
+
+# Compute a good label
+custSerCalls$label <- paste0(custSerCalls$category, "\n value: ", custSerCalls$count)
+
+# Make the plot
+ggplot(custSerCalls, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=category)) +
+  ggtitle("Plot for No Customer Service Calls") +
+  geom_rect() +
+  geom_label( x=4.3, aes(y=labelPosition, label=label), size=3) +
+  scale_fill_brewer(palette=3) +
+  coord_polar(theta="y") +
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+From the graph we can see that, the highest no of cutomers of around 1181 have done only 1 call to the customer service. While around 35 have done more than 6 calls, with 9 number of calls by any customer being the highest.
+```{r}
+#Boxplot:
+
+par(mfrow = c(3,3)) #reset plotting space
+
+sampleDS = cellphone[,-c(1,3,4,6)]
+
+for(i in 1:length(sampleDS)) {
+    boxplot(sampleDS[,i], main = names(sampleDS[i]), col = "blue", type = "l")
+}
+```
+All the continuous variables have outliers. Account Weeks, Data Usage, Monthly Charge has outliers on the max side. While Day Mins, Day Calls, Averge Fee and Roam Mins has outliers on both the sides.
+```{r}
+##Applying flooring and capping on all continous variables. Here we are using 1 and 99 percentile for outlier treatment on  all the variables.
+
+cellphone[,2] = ifelse(cellphone[,2]>=quantile(cellphone[,c(2)],0.99),quantile(cellphone$AccountWeeks,0.99),cellphone[,2])
+cellphone[,5] = ifelse(cellphone[,5]>=quantile(cellphone[,c(5)],0.99),quantile(cellphone$DataUsage,0.99),cellphone[,5])
+cellphone[,7] = ifelse(cellphone[,7]>=quantile(cellphone[,c(7)],0.99),quantile(cellphone$DayMins,0.99),cellphone[,7])
+cellphone[,7] = ifelse(cellphone[,7]<=quantile(cellphone[,c(7)],0.01),quantile(cellphone$DayMins,0.01),cellphone[,7])
+cellphone[,8] = ifelse(cellphone[,8]>=quantile(cellphone[,c(8)],0.99),quantile(cellphone$DayCalls,0.99),cellphone[,8])
+cellphone[,8] = ifelse(cellphone[,8]<=quantile(cellphone[,c(8)],0.01),quantile(cellphone$DayCalls,0.01),cellphone[,8])
+cellphone[,9] = ifelse(cellphone[,9]>=quantile(cellphone[,c(9)],0.99),quantile(cellphone$MonthlyCharge,0.99),cellphone[,9])
+cellphone[,10] = ifelse(cellphone[,10]>=quantile(cellphone[,c(10)],0.99),quantile(cellphone$OverageFee,0.99),cellphone[,10])
+cellphone[,10] = ifelse(cellphone[,10]<=quantile(cellphone[,c(10)],0.01),quantile(cellphone$OverageFee,0.01),cellphone[,10])
+cellphone[,11] = ifelse(cellphone[,11]>=quantile(cellphone[,c(11)],0.99),quantile(cellphone$RoamMins,0.99),cellphone[,11])
+cellphone[,11] = ifelse(cellphone[,11]<=quantile(cellphone[,c(11)],0.01),quantile(cellphone$RoamMins,0.01),cellphone[,11])
+
+summary(cellphone)
+
+sampleDS = cellphone[,-c(1,3,4,6)]
+```
+Post the putlier treatment on the continuous variables.
+Account Weeks - the max value has reduced from 243 to 195 and mean has been reduced to 100.9 .
+Data Usages - the max value has reduced from 5.4 to 4.1 and mean has been reduced to 0.81369 .
+Day Mins - the max value has reduced from 350.8 to 305.17 and min has been increased from 0 to 51.83 .
+Day Calls - the max value has reduced from 165 to 146 and min has been increased from 0 to 54 .
+Monthly Charge - the max value has reduced from 111.30 to 98.28 .
+Average Fee - the max value has reduced from 18.19 to 15.95 .
+Roam Mins - the max value has reduced from 20 to 16.6 and min has been increased from 0 to 3.33 .
+
+```{r}
+#Bivariate Analysis:
+
+pairs.panels(cellphone[], 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             ) 
+
+```
+
+
+```{r}
+##correlation between continous variables (Bivariate Analysis)
+round(cor(sampleDS),2)
+
+```
+```{r}
+mydataCorr = cor(sampleDS)
+
+#Is there a correlation among the variables
+corrplot(mydataCorr,method = "number")
+
+```
+We can see that Data Usage and Day Mins have high correlation with Monthly Charge.
+```{r}
+# contingency table of dicotomous variables with target variable
+cat.sampleDS = subset(cellphone, select = c(ContractRenewal,DataPlan,CustServCalls))
+
+names(cat.sampleDS)
+# for 3 categorical variables draw the barplot w.r.t to target variable
+par(mfrow=c(1,3))
+for (i in names(cat.sampleDS)) {
+  print(i)
+  print(table(cellphone$Churn, cat.sampleDS[[i]]))
+  barplot(table(cellphone$Churn, cat.sampleDS[[i]]),
+          col=c("grey","red"),
+          main = names(cat.sampleDS[i]))
+}
+par(mfrow=c(1,1))
+
+```
+The grey colour is represented for the churn variable.
+Contract Renewal - Churn is not majorly dependent on this variable as, high rate of churn means low contract renewal.
+Data Plan - the people without data plan have a churn rate almost as mch as the the people without data plan.
+Custmoer Service Calls - The people who have called customer service less than 3 times, seems to have a higher churn rate.
+```{r}
+##Chi Square test for categorical Variable (Bivariate Analysis)
+chisq.test(cellphone[,1],cellphone[,3]) #Churn and ContractRenewal
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(cellphone[,1],cellphone[,4]) #Churn and DataPlan
+
+#the p-value = 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(cellphone[,1],cellphone[,6]) #Churn and CustServCalls
+
+#the p-value < 0.05. Null hypothesis is rejected.
+
+chisq.test(cellphone[,3],cellphone[,4]) #ContractRenewal and DataPlan 
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(cellphone[,3],cellphone[,6]) #ContractRenewal and CustServCalls
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+chisq.test(cellphone[,4],cellphone[,6]) #DataPlan and CustServCalls
+
+#the p-value > 0.05. Failed to reject the Null hypothesis.
+
+```
+
+
+```{r}
+cat.sampleDS2 = cbind(cat.sampleDS,cellphone$Churn)
+colnames(cat.sampleDS2)[4] = "Churn"
+str(cat.sampleDS2)
+
+```
+```{r}
+num_columns <- c("AccountWeeks", "DataUsage", "DayMins","DayCalls","MonthlyCharge","OverageFee","RoamMins")
+cellphone[num_columns] <- sapply(cellphone[num_columns], as.numeric)
+sampleDS <- cellphone[,c("AccountWeeks", "DataUsage", "DayMins","DayCalls","MonthlyCharge","OverageFee","RoamMins")]
+sampleDS <- data.frame(scale(sampleDS))
+str(sampleDS)
+
+dummy<- data.frame(sapply(cat.sampleDS2,function(x) data.frame(model.matrix(~x-1,data =cat.sampleDS2))[,-1]))
+#Integrate categorical and numerical dataset
+#full.data = cbind(sampleDS, cat.sampleDS2)
+
+full.data = cbind(sampleDS, dummy)
+names(full.data)
+
+head(full.data)
+```
+```{r}
+#Split data into train and test dataset
+set.seed(1000)
+
+ds = sample.split(full.data$Churn, SplitRatio = 0.70)
+train = subset(full.data, ds == T)
+test = subset(full.data, ds == F)
+
+#check split consistency
+sum(as.integer(as.character(train$Churn)))/nrow(train)
+sum(as.integer(as.character(test$Churn)))/nrow(test)
+sum(as.integer(as.character(full.data$Churn)))/nrow(full.data)
+```
+This is an imbalanced dataset. The data has been split equally, with a churn rate of 14% across test and train dataset.
+```{r}
+#build the logistic model
+LR_Train_model = glm(Churn ~ ., data = train, family = binomial)
+summary(LR_Train_model)
+
+```
+```{r}
+#We are considering the VIF values greater than 2.5 as having high multicollinearlity.
+vif(LR_Train_model)
+```
+
+```{r}
+#Variable selection method
+forward_model = stepAIC(LR_Train_model,direction = "forward")
+backward_model = stepAIC(LR_Train_model,direction = "backward")
+both_model = stepAIC(LR_Train_model,direction = "both")
+
+summary(forward_model) # Same as full model
+forward_model$anova    # Lowest AIC = AIC=1442.9
+
+summary(backward_model) # Churn ~ DataUsage + DayMins + MonthlyCharge + OverageFee + RoamMins +  ContractRenewal + DataPlan + CustServCalls.x4 + CustServCalls.x5 + CustServCalls.x6 + CustServCalls.x7 + CustServCalls.x8 +  CustServCalls.x9
+
+backward_model$anova    # Lowest AIC=1440.903
+
+summary(both_model) #DataUsage + DayMins + MonthlyCharge + OverageFee + RoamMins + ContractRenewal + DataPlan + CustServCalls.x4 + CustServCalls.x5 + CustServCalls.x6 + CustServCalls.x7 + CustServCalls.x8 + CustServCalls.x9
+both_model$anova   # Lowest AIC = 1440.903 
+```
+We can use variance inflation factor (vif) to get rid of redundant predictors or the variables that have high multicollinearity between them. Multicollinearity exists when two or more predictor variables are highly related to each other and then it becomes difficult to understand the impact of an independent variable on the dependent variable.
+
+The Variance Inflation Factor(VIF) is used to measure the multicollinearity between predictor variables in a model. A predictor having a VIF of 2 or less is generally considered safe and it can be assumed that it is not correlated with other predictor variables. Higher the VIF, greater is the correlation of the predictor variable w.r.t other predictor variables. However, Predictors with high VIF may have high p-value(or highly significant), hence, we need to see the significance of the Predictor variable before removing it from our model.
+```{r}
+vif(both_model)
+```
+
+```{r}
+#Removing CustServCalls.x8 and CustServCalls.x8 due to high p-value
+final_model = glm(formula = Churn~ DataUsage + DayMins + MonthlyCharge + OverageFee + RoamMins + ContractRenewal + DataPlan + CustServCalls.x4 + CustServCalls.x5 + CustServCalls.x6 + CustServCalls.x7, family = binomial, data = train)
+
+summary(final_model)
+
+vif(final_model)
+```
+
+```{r}
+#Log likihood test: To ensure if logit model is valid or not
+lrtest(final_model)
+```
+The p-value is less than 0.05.
+```{r}
+# To get the logit R2 of goodness
+pR2(final_model)
+
+# Trust only McFadden since its conservative
+#if my McFadden > is between 0 to 10 - Goodness of fit is weak
+#if my McFadden > is between 10 to 20 - Goodness of fit is fare
+#if my McFadden > is between 20 to 30 - Goodness of fit is Moderately is robust
+#if my McFadden > is between 30 and above - Goodness of fit is reasonably robust model
+#Typical in non-linear model R2 will be less as against linear regression
+```
+Since our McFadden value is around 26%, we can consider our model to be moderately robust.
+
+```{r}
+odds = exp(coef(final_model))
+
+#for identifying the relative importance of variables we have to use ODDS instead of PROB
+prob=odds/(1+odds)
+relativeImportance=(odds[-1]/sum(odds[-1]))*100
+relativeImportance[order(relativeImportance)]
+
+# Performance on TRAIN dataset
+predTrain = predict(final_model, newdata = train, type="response")
+pt =table(train$Churn, predTrain>0.3)
+
+sum(diag(pt)) / nrow(train)
+(1915+95)/nrow(train)
+(1843+177)/nrow(train)
+
+```
+```{r}
+ROCRpred = prediction(predTrain, train$Churn)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+```{r}
+# Performance on TEST dataset
+predTest = predict(final_model, newdata = test, type="response")
+ptest = table(test$Churn, predTest>0.3)
+sum(diag(ptest)) / nrow(test)
+(812+26)/nrow(test)
+
+#table(test$Churn, predTest>0.3)
+#(790+67)/nrow(test)
+```
+```{r}
+ROCRpred = prediction(predTest, test$Churn)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+```{r}
+############### MODEL PERFORMANCE ###################
+#set.seed(1000)
+#blr_step_aic_forward(both_model1, details = FALSE)
+#blr_step_aic_backward(both_model1,details = FALSE)
+#blr_step_aic_both(both_model1, details = FALSE)
+
+#final.model = glm(Churn~DayMins+ContractRenewal+CustServCalls.x4+CustServCalls.x5 + OverageFee + DataPlan + CustServCalls.x6 + CustServCalls.x7 + RoamMins + CustServCalls.x8 + MonthlyCharge + DataUsage + CustServCalls.x9, 
+ #                 data = train, family = binomial)
+#summary(final.model)
+#predTest = predict(final.model, newdata= test, type="response")
+#table(test$Churn, predTest>0.5)
+#(811+27)/nrow(test)
+```
+```{r}
+set.seed(1000)
+#Log likihood test: To ensure if logit model is valid or not
+lrtest(LR_Train_model)
+```
+The p-value is less than 0.05.
+```{r}
+# To get the logit R2 of goodness
+pR2(LR_Train_model)
+
+# Trust only McFadden since its conservative
+#if my McFadden > is between 0 to 10 - Goodness of fit is weak
+#if my McFadden > is between 10 to 20 - Goodness of fit is fare
+#if my McFadden > is between 20 to 30 - Goodness of fit is Moderately is robust
+#if my McFadden > is between 30 and above - Goodness of fit is reasonably robust model
+#Typical in non-linear model R2 will be less as against linear regression
+```
+Since our McFadden value is around 27%, we can consider our model to be moderately robust.
+
+```{r}
+odds = exp(coef(LR_Train_model))
+
+#for identifying the relative importance of variables we have to use ODDS instead of PROB
+prob=odds/(1+odds)
+relativeImportance=(odds[-1]/sum(odds[-1]))*100
+relativeImportance[order(relativeImportance)]
+
+# Performance on TRAIN dataset
+predTrain = predict(LR_Train_model, newdata = train, type="response")
+ptrain = table(train$Churn, predTrain>0.3)
+sum(diag(ptrain)) / nrow(train)
+
+(1915+95)/nrow(train)
+(1843+177)/nrow(train)
+
+```
+```{r}
+ROCRpred = prediction(predTrain, train$Churn)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+```{r}
+# Performance on TEST dataset
+predTest = predict(LR_Train_model, newdata = test, type="response")
+ptr=table(test$Churn, predTest>0.3)
+
+sum(diag(ptr)) / nrow(test)
+
+(810+27)/nrow(test)
+
+#table(test$Churn, predTest>0.3)
+#(790+65)/nrow(test)
+```
+```{r}
+ROCRpred = prediction(predTest, test$Churn)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+```{r}
+### AREA UNDER THE CURVE
+logit_auc = performance(ROCRpred, "auc")
+as.numeric(logit_auc@y.values) ##AUC Value
+
+### KS STATISTIC
+logit_ks = max(perf@y.values[[1]]-perf@x.values[[1]])
+logit_ks
+
+# gains table
+
+gains.cross <- gains(actual=test$Churn , predicted=predTest, groups=10)
+print(gains.cross)
+
+```
+
+```{r}
+############### MODEL PERFORMANCE ###################
+set.seed(1000)
+
+blr_step_aic_forward(LR_Train_model, details = FALSE)
+blr_step_aic_backward(LR_Train_model,details = FALSE)
+blr_step_aic_both(LR_Train_model, details = FALSE)
+
+```
+```{r}
+#Using the backward model
+final.model = glm(Churn ~ DayMins + ContractRenewal + CustServCalls.x4 + CustServCalls.x5 + OverageFee + CustServCalls.x6 + DataPlan + CustServCalls.x8 + CustServCalls.x9 + CustServCalls.x7 + RoamMins + MonthlyCharge + DataUsage, data = train, family = binomial)
+
+summary(final.model)
+predTest = predict(final.model, newdata= test, type="response")
+npt = table(test$Churn, predTest>0.3)
+sum(diag(npt))/nrow(test)
+(811+  27)/nrow(test)
+
+
+```
+
+```{r}
+blr_model_fit_stats(final.model)
+#blr_confusion_matrix(final.model)
+blr_regress(final.model)
+
+#table(factor(pred, levels=min(test):max(test)), 
+ #     factor(test, levels=min(test):max(test)))
+```
+
+```{r}
+################# Other package for model performance ############
+
+k = blr_gains_table(final.model,train)
+plot(k)
+blr_roc_curve(k)
+```
+```{r}
+blr_ks_chart(k, title = "KS Chart",
+             yaxis_title = " ",xaxis_title = "Cumulative Population %",
+             ks_line_color = "black")
+```
+```{r}
+blr_decile_lift_chart(k, xaxis_title = "Decile",
+                      yaxis_title = "Decile Mean / Global Mean",
+                      title = "Decile Lift Chart",
+                      bar_color = "blue", text_size = 3.5,
+                      text_vjust = -0.3)
+```
+```{r}
+blr_decile_capture_rate(k, xaxis_title = "Decile",
+                        yaxis_title = "Capture Rate",
+                        title = "Capture Rate by Decile",
+                        bar_color = "blue", text_size = 3.5,
+                        text_vjust =-0.3)
+```
+```{r}
+#blr_confusion_matrix(final.model)
+#table(final.model)
+
+blr_gini_index(final.model, data = test)
+
+blr_roc_curve(k, title = "ROC Curve",
+              xaxis_title = "1 - Specificity",
+              yaxis_title = "Sensitivity",roc_curve_col = "blue",
+              diag_line_col = "red", point_shape = 18,
+              point_fill = "blue", point_color = "blue",
+              plot_title_justify = 0.5)  
+
+blr_rsq_mcfadden(final.model)
+blr_rsq_mcfadden_adj(final.model)
+
+```
+Confusion Matrix
+```{r}
+# Confusion matrix for threshold of 0.3
+npt = table(test$Churn, predTest>0.3)
+
+# Sensitivity
+npt[2,2]/sum(npt[2,])
+
+# Specificity 
+npt[1,1]/sum(npt[1,])
+
+```
+
+KNN
+```{r}
+set.seed(1000)
+#Removing he dependent variable from the train and test dataset
+train_knn = train[-19]
+test_knn = test[-19]
+
+#Check the dimensions of the train and test dataset
+dim(train_knn)
+dim(test_knn)
+```
+```{r}
+#Storing the target variable for training and test dataset
+knn_train_label = train$Churn
+knn_test_label = test$Churn
+```
+```{r}
+#KNN Model building
+knn_test_pred = knn(train = train_knn, test = test_knn, cl = knn_train_label, k =7, prob = T)
+
+knn_tab = table(knn_test_pred, knn_test_label)
+knn_tab
+```
+
+
+```{r}
+#accuracy
+sum(diag(knn_tab))/nrow(test_knn)
+
+##Error
+1 - sum(diag(knn_tab))/sum(knn_tab)
+```
+When K = 3, error is 0.126
+When k = 5, error is 0.123
+When k = 7, error is 0.119
+When k = 9, error is 0.121
+
+We will take the k value having the lowest error that. Which is k = 7.
+```{r}
+confusionMatrix(table(knn_test_pred, knn_test_label))
+```
+Optimation
+```{r}
+i=1
+k.optm=1
+for (i in 1:28){
+ knn.mod <- knn(train=train_knn, test=test_knn, cl=knn_train_label, k=i)
+ k.optm[i] <- 100 * sum(knn_test_label == knn.mod)/NROW(knn_test_label)
+ k=i
+ cat(k,'=',k.optm[i],'
+')
+ }
+```
+```{r}
+#Accuracy plot
+plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level")
+```
+
+Naive Bayes Method
+```{r}
+#Building the Naive Bayes Model
+naive_cellphone = naive_bayes(cellphone$Churn ~ ., data = cellphone,laplace = 0.5)
+
+#Split data into train and test dataset
+set.seed(1000)
+
+nb_ds = sample.split(cellphone$Churn, SplitRatio = 0.70)
+nb_train = subset(cellphone, nb_ds == T)
+nb_test = subset(cellphone, nb_ds == F)
+
+```
+```{r}
+#predicting the model
+naive_predict = predict(naive_cellphone, nb_train, type = 'prob')
+#print(naive_predict)
+
+
+```
+
+
+```{r}
+#To plot the features with Naive Bayes
+plot(naive_cellphone)
+```
+```{r}
+#Confusion Matrix - train data
+predict_train =  predict(naive_cellphone, nb_train, type = "class")
+#predict_train
+
+(tab1 = table(predict_train, nb_train$Churn))
+tab1
+
+#Train Error
+1 -  sum(diag(tab1)) / sum(tab1)
+
+```
+
+```{r}
+#Confusion Matrix - test data
+predict_test =  predict(naive_cellphone, nb_test)
+
+(tab2 = table(predict_test, nb_test$Churn))
+
+tab2
+#Train Error
+1 -  sum(diag(tab2)) / sum(tab2)
+```
+```{r}
+confusionMatrix(predict_test, nb_test$Churn)
+```
+
+###
+### train the Logistic Regression model
+###
+
+``` {r}
+
+#set.seed(12345)
+set.seed(1000)
+
+levels(cellphone$Churn) <- make.names(levels(cellphone$Churn))
+
+control = trainControl(method = "repeatedcv", 
+                       classProbs = T, 
+                       number = 10, 
+                       summaryFunction = twoClassSummary, 
+                       repeats = 3)
+
+modelLOGIT = train(Churn ~ ., 
+                    data = cellphone, 
+                    method = "regLogistic", 
+                    metric = 'ROC', 
+                    trControl = control)
+summary(modelLOGIT)
+
+
+```
+###
+### train the Naive Base model
+###
+
+
+``` {r}
+
+set.seed(1000)
+
+modelNB = train(Churn ~ ., 
+                data = cellphone, 
+                method = "nb",
+                metric = 'ROC', 
+                trControl = control)
+summary(modelNB)
+
+```
+###
+### train the KNN  model
+###
+
+
+``` {r}
+
+set.seed(1000)
+
+modelKNN  = train(Churn ~ ., 
+                  data = cellphone, 
+                  method = "knn",
+                  metric = 'ROC', 
+                  trControl = control)
+summary(modelKNN)
+
+```
+###
+### collect resamples :
+###
+
+``` {r}
+
+results = resamples(list(Logit = modelLOGIT, 
+                         NB = modelNB, 
+                         KNN = modelKNN))
+
+
+```
+
+###
+### Compare the results with different models
+###
+``` {r}
+
+summary(results)
+
+``` 
+###
+### Box plot for the measures
+###
+
+``` {r}
+
+bwplot(results)
+
+```
