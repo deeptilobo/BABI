@@ -1,0 +1,272 @@
+---
+title: "time_series"
+author: "Deepti Lobo"
+date: "12 November 2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+For this assignment, you are requested to download the Forecast package in R. The package contains methods and tools for displaying and analyzing univariate time series forecasts including exponential smoothing via state space models and automatic ARIMA modelling. Explore the gas (Australian monthly gas production)  dataset in Forecast package to do the following:
+
+Read the data as a time series object in R. Plot the data (5 marks)
+What do you observe? Which components of the time series are present in this dataset? (5 marks)
+What is the periodicity of dataset? (5 marks)
+Is the time series Stationary? Inspect visually as well as conduct an ADF test? Write down the null and alternate hypothesis for the stationarity test? De-seasonalise the series if seasonality is present? (20 marks)
+Develop an ARIMA Model to forecast for next 12 periods. Use both manual and auto.arima (Show & explain all the steps) (20 marks)
+Report the accuracy of the model (5 marks)
+
+Assumptions
+1. Data should be stationary - by stationary it means that the properties of the series doesn't depend on the time when it is captured. A white noise series and series with cyclic behavior can also be considered as stationary series.
+2. Data should be univariate - ARIMA works on a single variable. Auto-regression is all about regression with the past values.
+
+```{r}
+#set working directory
+setwd("D:/imp_doc/BABI/Time Series Forcasting/Project")
+
+getwd()
+
+#import library
+
+library(forecast)
+library(stats)
+library(tseries)
+library(ggplot2)
+```
+
+The gas time series data contains Australian monthly gas production. The data available here is for the period of 1956 - 1995. We have around 476 observations here. It is a monthly data series. This dataset  is drawn from the forecast package.
+The timeseries is univariate, has only one variable.
+
+```{r}
+#View(gas)
+plot.ts(gas)
+
+```
+
+```{r}
+### Convert this into timeseries object
+gas_ts = ts(gas,start = c(1956,1),frequency = 12)
+
+#Plot the data set
+plot(gas_ts)
+
+```
+```{r}
+gas_ts
+
+#Class of the dataset
+class(gas_ts)
+
+### To print start of the series
+start(gas_ts)
+
+### To print end of the series
+end(gas_ts)
+
+### To print frequency of the series
+frequency(gas_ts)
+
+cycle(gas_ts)
+```
+
+This series starts from 1956, !st month (i.e) January and ends at 1995, 8th month (i.e) August. Frequency of the data is 12, which implies that this is a monthly series. 
+From the cycle we can say that all the monthly values are available from Jan, 1956 to Aug, 1995. The dataset does not have any missing value.
+
+Data Exploration and Visualization
+```{r}
+summary(gas_ts)
+
+```
+The difference between the median and max value, migght be read as if the data is skewed. However, for a time series such an interpretation should be made with caution, as time series may have two additional components (i.e) treand and seasonality. Hence the difference could be beacause of these two components.
+```{r}
+#Box plot function to see any seasonal effects
+boxplot(gas_ts~cycle(gas_ts), xlab = "Month", ylab = "Gas Production", main = "Monthly Australian Gas Production from 1956 to 1995")
+```
+From the initial inference we can see that the gas proaduction seems to gradually increase and then decrease like a bell curve indicating seasonality.
+```{r}
+### Aggregation at a Quarter and Year Level
+gas_ts_qtr = aggregate(gas_ts, nfrequency=4)
+gas_ts_yr = aggregate(gas_ts, nfrequency=1)
+```
+
+```{r}
+### Plots
+
+plot.ts(gas_ts, main = "Monthly Gas Production in Australia", xlab = "Year", ylab = "ML")
+
+plot.ts(gas_ts_qtr, main = "Quarterly Gas Production in Australia", xlab = "Year", ylab = "ML")
+
+plot.ts(gas_ts_yr, main = "Yearly Gas Production in Australia", xlab = "Year", ylab = "ML")
+```
+The monthly graph shows an increase in production from 1970 onwards.
+The quarterly graph shows an increase in production from 1970 onwards
+The yearly graph shows an increase in production from 1970 onwards
+```{r}
+### Seasonality Plot for further analysis
+
+seasonplot(gas_ts, year.labels = TRUE, year.labels.left=TRUE, col=1:40, pch=19, main = "Monthly Gas Production in Australia - seasonplot", xlab = "Month", ylab = "ML")
+
+monthplot(gas_ts, main = "Monthly Gas Production in Australia - monthplot", xlab = "Month", ylab = "ML")
+
+```
+The season plot shows an increase in production upto July and then on a decrease. 
+The month plot also similarly shows the peak production in July every year. 
+
+Decomposition of the data
+STL is a versatile and robust method for decomposing time series. STL is an acronym for "Seasonal and Trend decomposition using Loess".
+```{r}
+decomp = stl(gas_ts, s.window = "periodic")
+plot(decomp)
+```
+Here we have 4 components:
+1. Data - the actual data plot.
+2. Seasonal - There seems to be a uniform monthly pattern of the data points.
+3. Trend - There is an upward movement of the data points.
+4. Remainder - This is the unexplainable part of the data.
+
+Check for stationarity
+A stationary time series is one whose properties do not depend on the time at which the series is observed. Thus, time series with trends, or with seasonality, are not stationary - the trend and seasonality will affect the value of the time series at different times.
+
+1. Test stationarity of the time series (ADF)
+In order to test the stationarity of the time series, let's run the Augmented Dickey-Fuller Test using the adf.test() function from the tseries R package.
+
+First set the hypothesis test:
+The null hypothesis H0 : that the time series is non stationary.
+The alternative hypothesis HA : that the time series is stationary
+```{r}
+# Ho : Non-Stationary 
+# Ha : Stationary
+
+adf.test(gas_ts, alternative = "stationary")
+```
+
+As a rule of thumb, where the p-value is less than 5%, we have a strong evidence against the null hypothesis, so we reject the null hypothesis. As per the test results above, the p-value is 0.2764 which is >0.05.Therefore we fail to reject the null hypothesis that the time series is not stationary.
+
+2. Test stationarity of the time series (Autocorrelation)
+Another way to test for stationarity is to use autocorrelation. We will use autocorrelation function (acf) from the base stats R package. This function plots the correlation between a series and its lags (ie previous observations) with a 95% confidence interval in blue. If the autocorrelation crosses the dashed blue line, it means that specific lag is significantly correlated with current series.
+
+ACF and PACF plots
+```{r}
+acf(gas_ts) # q = 0,1,2
+autoplot(acf(gas_ts,plot=FALSE))+ labs(title="Correlogram of Monthly Australian Gas Production from 1956 to 1995") + theme_classic()
+acf(gas_ts, lag.max = 24)
+```
+From the ACF plot, we can see that they are significant autocorrelation with many lags in our demand series. The correlation peaks at Lag(0.0), Lag(1.0) and Lag(2.0) indicating seasonality. Since all the values are above the dotted lines, q = 0,1,2,3,4,5,6,7,8,9,10,11.
+
+```{r}
+pacf(gas_ts, lag.max = 24) # p = 1
+
+```
+PACF plot shows that there could be monthly seasonality since the plot peaks at intervals of 12. p = 1,2,4,5,6,7,8,9.
+
+Differencing the time series data : Lets remove seasonality
+seasadj returns seasonally adjusted data constructed by removing the seasonal component.
+```{r}
+deseasonal_gas=seasadj(decomp)
+plot(deseasonal_gas)
+```
+You can see that the seasonal variation has been removed from the seasonally adjusted time series. The seasonally adjusted time series now just contains the trend component and a remainder component(white noise).
+
+Differencing the time series data : Lets remove trend also
+We use differencing to remove the trend from the time series.
+```{r}
+adf.test(deseasonal_gas, alternative = "stationary")
+de_trend = diff(deseasonal_gas, differences = 1)
+plot(de_trend)
+
+```
+You can see that the seasonal and trend variation has been removed from the adjusted time series. The time series now just contains the remainder component.
+
+```{r}
+#Re-run the test to see if the series is stationary
+adf.test(de_trend, alternative = "stationary")
+```
+The ADF test was run after de-seasonalizing the series. It returned a p-value of 0.3992. We furthur went ahead and removed the trend. It gave a p-value of 0.01. 
+As the p-value is  <0.05, we can reject the Null Hypothesis. The differenced demand is stationary.
+
+acf and pacf for dif time series
+```{r}
+Acf(de_trend, main='ACF for Differenced Series') #q = 0, 1, 3,4,5,6,7,9,10,11
+Pacf(de_trend, main='PACF for Differenced Series') #p=1, ,2,3,4,5,6,7,8,9,10,12
+#d = 1
+```
+
+From the ACF plot, there is a cut off after lag 0. This implies that q=0. PACF cuts off after lag 1. Hence p=1.
+
+ARIMA Modeling
+ARIMA is the abbreviation for AutoRegressive Integrated Moving Average. Auto Regressive (AR) terms refer to the lags of the differenced series, Moving Average (MA) terms refer to the lags of errors and I is the number of difference used to make the time series stationary.
+As we have seen, the series is univariate and we have removed the seasonality and trend to make the series as stationary. We can go ahead and build the model.
+
+
+Splitting into training and test sets
+```{r}
+gasTStrain = window(deseasonal_gas, start=1956, end=c(1994,8))
+gasTStest= window(deseasonal_gas, start=c(1994,9), end=c(1995,8))
+
+```
+
+```{r}
+# order : p(pacf)-AR,d(diff order)-I,q(acf)-MA
+gasARIMA = arima(gasTStrain, order=c(2,1,4))
+gasARIMA
+tsdisplay(residuals(gasARIMA), lag.max=15, main='Model Residuals')
+```
+
+Fitting with Auto ARIMA
+Auto-ARIMA uses brute force and tries different combinations of p, q, and d and then returns the best model after evaluation.
+```{r}
+fit<-auto.arima(gasTStrain, seasonal=FALSE)
+fit
+tsdisplay(residuals(fit), lag.max=15, main='Auto ARIMA Model Residuals')
+```
+Auto ARIMA also fits the different p = 1 and q = 5 parameters for the model, but has a slightly higher AIC, 8328.33.
+
+#Ljung box test
+The Ljung Box test is a way to test for the absence of serial autocorrelation, up to a specified lag k.
+
+H0: Residuals are independent
+Ha: Residuals are not independent
+
+```{r}
+
+Box.test(gasARIMA$residuals)
+
+Box.test(fit$residuals)
+
+```
+Residuals are independent
+
+Forecasting with the ARIMA model Using 
+We are predicting for the next 12 months. Hence h is now 12 time points.
+```{r}
+#Without Trend and Seasonality
+fcast <- forecast(gasARIMA, h=12)
+fcast1 <- forecast(fit, h=12)
+plot(fcast)
+plot(fcast1)
+
+```
+
+```{r}
+# With Trend
+fit1<-auto.arima(gas_ts, seasonal=FALSE)
+fcast2=forecast(fit1, h=12)
+plot(fcast2)
+
+withSeas = fcast2$fitted + decompose(gas_ts)$seasonal
+plot(withSeas)
+
+decompose(gas_ts)
+```
+
+Accuracy of the forecast 
+```{r}
+f7=forecast(gasARIMA)
+accuracy(f7, gasTStest)
+
+f8=forecast(fit)
+accuracy(f8, gasTStest)
+
+```
