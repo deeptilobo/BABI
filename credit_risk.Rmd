@@ -1,0 +1,503 @@
+---
+title: "credit_risk"
+author: "Deepti Lobo"
+date: "1 February 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#set working directory
+setwd("D:/imp_doc/BABI/Finance & Risk Analytics/Project")
+getwd()
+
+#Import libraries
+library(readxl)
+library(psych)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(DMwR)
+library(VIM)
+library(car)
+library(scales)
+library(corrplot)
+library(caret)
+library(ROCR)
+library(pscl)
+library(lmtest)
+library(MASS)
+```
+
+
+```{r}
+#Read the train and test data sets
+trainDS = read_excel("raw-data.xlsx")
+testDS = read_excel("validation_data.xlsx")
+
+#Class type of the DS
+class(trainDS)
+class(testDS)
+
+#The no of rows and columns
+dim(trainDS)
+dim(testDS)
+
+#Names of the columns
+names(trainDS)
+names(testDS)
+```
+
+```{r}
+#Display the first six rows
+head(trainDS)
+
+```
+There is no default variable, so the default variable is created by spiltting the Networth Next Year variable. The -ve observations will be 1 and +ve observations will be 0.
+```{r}
+#Adding the default variable
+trainDS$Default = ifelse(trainDS$`Networth Next Year` < 0, 1,0)
+
+#Removing Networth Next Year
+trainDS = trainDS[,-c(2)]
+
+names(testDS)[2]<- "Default"
+
+```
+
+```{r}
+#Is there any values missing?
+anyNA(trainDS)
+
+colSums(is.na(trainDS))
+
+```
+
+Since all the values are missing in "Deposits (accepted by commercial banks)", removing this column from the data set.
+
+```{r}
+#Removing "Deposits (accepted by commercial banks)"
+trainDS = trainDS[,-c(21)]
+testDS = testDS[,-c(22)]
+```
+```{r}
+#Convert Char variables to numeric for train and test dataset
+trainDS$`Creditors turnover` = as.numeric(trainDS$`Creditors turnover`)
+trainDS$`Debtors turnover` = as.numeric(trainDS$`Debtors turnover`)
+trainDS$`Finished goods turnover` = as.numeric(trainDS$`Finished goods turnover`)
+trainDS$`WIP turnover` = as.numeric(trainDS$`WIP turnover`)
+trainDS$`Raw material turnover` = as.numeric(trainDS$`Raw material turnover`)
+trainDS$`Shares outstanding` = as.numeric(trainDS$`Shares outstanding`)
+trainDS$`Equity face value` = as.numeric(trainDS$`Equity face value`)
+trainDS$`PE on BSE` = as.numeric(trainDS$`PE on BSE`)
+
+testDS$`Creditors turnover` = as.numeric(testDS$`Creditors turnover`)
+testDS$`Debtors turnover` = as.numeric(testDS$`Debtors turnover`)
+testDS$`Finished goods turnover` = as.numeric(testDS$`Finished goods turnover`)
+testDS$`WIP turnover` = as.numeric(testDS$`WIP turnover`)
+testDS$`Raw material turnover` = as.numeric(testDS$`Raw material turnover`)
+testDS$`Shares outstanding` = as.numeric(testDS$`Shares outstanding`)
+testDS$`Equity face value` = as.numeric(testDS$`Equity face value`)
+testDS$`PE on BSE` = as.numeric(testDS$`PE on BSE`)
+
+```
+
+```{r}
+#Replacing NA's with median for that columns
+trainDS<-as.data.frame(trainDS) 
+
+for (i in 1:ncol(trainDS)) {
+  trainDS[,i] = as.numeric(trainDS[,i])
+  trainDS[is.na(trainDS[,i]),i] = median(trainDS[,i], na.rm = TRUE)
+}
+
+#Is there any values missing for test?
+anyNA(testDS)
+
+colSums(is.na(testDS))
+
+testDS<-as.data.frame(testDS) 
+
+for (i in 1:ncol(testDS)) {
+  testDS[,i] = as.numeric(testDS[,i])
+  testDS[is.na(testDS[,i]),i] = median(testDS[,i], na.rm = TRUE)
+}
+```
+
+#Outlier Treatment
+```{r}
+#Boxplot:
+
+par(mfrow = c(3,3)) #reset plotting space
+
+for(i in 1:length(trainDS)) {
+    boxplot(trainDS[,i], main = names(trainDS[i]), col = "blue", type = "l")
+}
+```
+```{r}
+Default = trainDS$Default
+
+for (i in 2:ncol(trainDS)) {
+  q  <- quantile(trainDS[,i], c(0.1, 0.99)) 
+  trainDS[,i] <- squish(trainDS[,i], q) 
+}
+
+trainDS$Default = Default
+```
+
+#Descriptive Analysis
+```{r}
+#Data types of all the columns
+str(trainDS)
+str(testDS)
+
+```
+
+
+
+```{r}
+summary(trainDS)
+```
+```{r}
+##Summary Satatistics Measure of central tendency and dispersion (Univariate Analysis)
+describe(trainDS,na.rm = TRUE,
+         quant = c(0.01,0.05,0.10,0.25,0.75,0.90,0.95,0.99),IQR=TRUE,check=TRUE)
+```
+
+#Univariate Analysis:
+```{r}
+#Histogram for numerical variables
+par(mfrow = c(3,3)) #reset plotting space
+
+trainDS[,c(2:13)] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+
+trainDS[14:25] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+
+trainDS[26:37] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+
+trainDS[38:51] %>% keep(is.numeric) %>% gather() %>%
+  ggplot(aes(value)) + facet_wrap(~key, scales = "free") + geom_histogram(color = "black", fill = "blue")
+```
+
+```{r}
+trainDSCorr = cor(trainDS)
+
+#Is there a correlation among the variables
+corrplot(trainDSCorr)
+```
+```{r}
+##correlation between continous variables (Bivariate Analysis)
+round(cor(trainDS),2)
+
+```
+
+
+Variable Creation
+```{r}
+#Profitability ratio is derived by dividing "Profit after tax" by "Sales"
+trainDS$Profitability = trainDS$`Profit after tax` / trainDS$Sales
+
+#Leverage ratio (Equity Multiplier) is derived by dividing Total Asset by Total Equity
+
+#trainDS$`Total Equity` = trainDS$`Total liabilities`/trainDS$`Debt to equity ratio (times)`
+
+trainDS$`Equity Multiplier` = trainDS$`Total assets`/ (trainDS$`Total liabilities`/trainDS$`Debt to equity ratio (times)`)
+
+#Liquidity ratio (Net working capital ratio) is derived by dividing Net Working Capital by Total Asset
+
+trainDS$`Net working Capital ratio` = trainDS$`Net working capital`/trainDS$`Total assets`
+
+#Company size ratio is got by dividing the value of a column by the Total Assets
+trainDS$`Networth to Total Assets` = trainDS$`Net worth`/trainDS$`Total assets`
+trainDS$`Totalincome To Total Assets` = trainDS$`Total income`/trainDS$`Total assets`
+trainDS$`Totalexpenses To Total Assets` = trainDS$`Total expenses`/trainDS$`Total assets` 
+
+```
+```{r}
+#Adding the variables to test dataset
+
+#Profitability ratio
+testDS$Profitability = testDS$`Profit after tax` / testDS$Sales
+
+#Leverage ratio
+testDS$`Equity Multiplier` = testDS$`Total assets`/ (testDS$`Total liabilities`/testDS$`Debt to equity ratio (times)`)
+
+#Liquidity ratio
+testDS$`Net working Capital ratio` = testDS$`Net working capital`/testDS$`Total assets`
+
+#Company size ratio
+testDS$`Networth to Total Assets` = testDS$`Net worth`/testDS$`Total assets`
+testDS$`Totalincome To Total Assets` = testDS$`Total income`/testDS$`Total assets`
+testDS$`Totalexpenses To Total Assets` = testDS$`Total expenses`/testDS$`Total assets` 
+
+```
+
+#Logistic Regression Model
+```{r}
+#set seed
+set.seed(1000)
+
+#check for imbalance data set
+sum(as.integer(as.character(testDS$Default)))/nrow(testDS)
+
+#build default model
+model1 = glm(Default~.-`Total liabilities`-`Equity Multiplier`-Num, data = trainDS, family = binomial)
+summary(model1)
+```
+```{r}
+#We are considering the VIF values greater than 2.5 as having high multicollinearlity.
+vif(model1)
+```
+
+```{r}
+#Variable selection method
+forward_model = stepAIC(model1,direction = "forward")
+backward_model = stepAIC(model1,direction = "backward")
+both_model = stepAIC(model1,direction = "both")
+
+summary(forward_model) # Same as full model
+forward_model$anova    # Lowest AIC = AIC=1001.8
+
+summary(backward_model) 
+backward_model$anova    # Lowest AIC=957.84
+
+summary(both_model) 
+both_model$anova   # Lowest AIC = 957.84
+```
+```{r}
+vif(forward_model)
+vif(backward_model)
+vif(both_model)
+```
+
+
+```{r}
+#Log likihood test: To ensure if logit model is valid or not
+lrtest(both_model)
+```
+The p-value is less than 0.05.
+```{r}
+# To get the logit R2 of goodness
+pR2(both_model)
+
+# Trust only McFadden since its conservative
+#if my McFadden > is between 0 to 10 - Goodness of fit is weak
+#if my McFadden > is between 10 to 20 - Goodness of fit is fare
+#if my McFadden > is between 20 to 30 - Goodness of fit is Moderately is robust
+#if my McFadden > is between 30 and above - Goodness of fit is reasonably robust model
+#Typical in non-linear model R2 will be less as against linear regression
+```
+Since our McFadden value is around 47%, we can consider our model to be reasonably robust.
+
+```{r}
+odds = exp(coef(both_model))
+
+#for identifying the relative importance of variables we have to use ODDS instead of PROB
+prob=odds/(1+odds)
+relativeImportance=(odds[-1]/sum(odds[-1]))*100
+relativeImportance[order(relativeImportance)]
+
+# Performance on TRAIN dataset
+predTrain = predict(both_model, newdata = trainDS, type="response")
+pt =table(trainDS$Default, predTrain>0.5)
+
+sum(diag(pt)) / nrow(trainDS)
+(3273+90)/nrow(trainDS)
+(144+34)/nrow(trainDS)
+
+# Sensitivity
+pt[2,2]/sum(pt[2,])
+
+# Specificity 
+pt[1,1]/sum(pt[1,])
+
+#error rate
+1 - sum(diag(pt)) / sum(pt)
+
+
+```
+```{r}
+ROCRpred = prediction(predTrain, trainDS$Default)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+
+
+```{r}
+# Performance on TEST dataset
+predTest = predict(both_model, newdata = testDS, type="response")
+ptest = table(testDS$Default, predTest>0.5)
+
+sum(diag(ptest)) / nrow(testDS)
+(616+48)/nrow(testDS)
+
+# Sensitivity
+ptest[2,2]/sum(ptest[2,])
+
+# Specificity 
+ptest[1,1]/sum(ptest[1,])
+
+#error rate
+1 - sum(diag(ptest)) / sum(ptest)
+
+```
+
+```{r}
+ROCRpred = prediction(predTest, testDS$Default)
+as.numeric(performance(ROCRpred, "auc")@y.values)
+perf = performance(ROCRpred, "tpr","fpr")
+plot(perf,col="black",lty=2, lwd=2)
+plot(perf,lwd=3,colorize = TRUE)
+```
+
+
+Deciling
+```{r}
+trainDS$pred = predict(both_model, newdata = trainDS, type="response")
+
+decile = function(x)
+{
+  deciles = vector(length = 10)
+  
+  for (i in seq(0.1,1,.1)) {
+    deciles[i*10] = quantile(x,i,na.rm = T)
+  }
+  return(
+    ifelse(x < deciles[i],1,
+           ifelse(x < deciles[2],2,
+                  ifelse(x < deciles[3],3,
+                         ifelse(x < deciles[4],4,
+                                ifelse(x < deciles[5],5,
+                                       ifelse(x < deciles[6],6,
+                                              ifelse(x < deciles[7],7,
+                                                     ifelse(x < deciles[8],8,
+                                                            ifelse(x < deciles[9],9,10
+                                                                   ))))))))))
+}
+
+trainDS$deciles = decile(trainDS$pred)
+
+```
+```{r}
+ggplot(trainDS, aes(x=deciles, y=pred)) + 
+    stat_summary(fun.y=mean, geom="line") +
+     scale_x_reverse(breaks=1:10)
+```
+
+```{r}
+tmp_DT = data.table(trainDS) 
+
+rank = tmp_DT[,list(cnt=length(Default),
+                    cnt_resp = sum(Default == 1),
+                    cnt_non_resp = sum(Default == 0)
+), by = deciles][order(-deciles)]
+```
+```{r}
+rank$rrate = round(rank$cnt_resp / rank$cnt,4)
+rank$cum_resp = cumsum(rank$cnt_resp)  
+rank$cum_non_resp = cumsum(rank$cnt_non_resp)  
+rank$cum_rel_resp = round(rank$cum_resp / sum(rank$cnt_resp),4)  
+rank$cum_rel_non_resp = round(rank$cum_non_resp / sum(rank$cnt_non_resp),4) 
+rank$ks = abs(rank$cum_rel_resp - rank$cum_rel_non_resp) * 100  
+rank$rrate = percent(rank$rrate)  
+rank$cum_rel_resp = percent(rank$cum_rel_resp)  
+rank$cum_rel_non_resp = percent(rank$cum_rel_non_resp)  
+trainDSRank = rank 
+```
+```{r}
+view(trainDSRank)
+```
+Test data decile
+```{r}
+testDS$pred = predict(both_model, newdata = testDS, type="response")
+
+decile = function(x) 
+{    
+  deciles = vector(length=10)    
+  for (i in seq(0.1,1,.1))   
+  {      
+      deciles[i*10] = quantile(x, i, na.rm=T) 
+  }    
+  return (      
+    ifelse(x<deciles[1], 1,             
+           ifelse(x<deciles[2], 2,                    
+                  ifelse(x<deciles[3], 3,                           
+                         ifelse(x<deciles[4], 4,                                  
+                                ifelse(x<deciles[5], 5,                                        
+                                       ifelse(x<deciles[6], 6,                                               
+                                              ifelse(x<deciles[7], 7,
+                                                     ifelse(x<deciles[8], 8, 
+                                                            ifelse(x<deciles[9], 9, 10
+                                                            ))))))))))
+}
+                                                                                                                        testDS$deciles = decile(testDS$pred)  
+ 
+```
+```{r}
+tmp_DT_1 = data.table(testDS) 
+ 
+rank_1 = tmp_DT_1[, list(cnt = length(Default),                       
+                      cnt_resp = sum(Default == 1),                       
+                      cnt_non_resp = sum(Default == 0) 
+                      ), by = deciles][order(-deciles)] 
+```
+```{r}
+
+rank_1$rrate = round(rank_1$cnt_resp / rank_1$cnt,4)  
+rank_1$cum_resp = cumsum(rank_1$cnt_resp)  
+rank_1$cum_non_resp = cumsum(rank_1$cnt_non_resp)  
+rank_1$cum_rel_resp = round(rank_1$cum_resp / sum(rank_1$cnt_resp),4)  
+rank_1$cum_rel_non_resp = round(rank_1$cum_non_resp / sum(rank_1$cnt_non_resp),4)
+rank_1$ks = abs(rank_1$cum_rel_resp - rank_1$cum_rel_non_resp) * 100
+rank_1$cum_rel_resp = percent(rank_1$cum_rel_resp)  
+rank_1$cum_rel_non_resp = percent(rank_1$cum_rel_non_resp)  
+testDSRank = rank_1 
+```
+```{r}
+View(rank) 
+view(testDSRank)
+  ```
+Decile Comparison
+```{r}
+# cut_p returns the cut internal for each observation 
+cut_ptrain = with(trainDS, 
+                  cut(pred, breaks = quantile(pred, prob=seq(0,1,0.1)), include.lowest = T)) 
+
+cut_ptest = with(testDS, 
+                 cut(pred, breaks = unique(quantile(pred, prob=seq(0,1,0.1))), include.lowest = T)) 
+
+levels(cut_ptrain) 
+levels(cut_ptest) 
+
+trainDS$rank = factor(cut_ptrain, labels = 1:10) 
+testDS$rank = factor(cut_ptest, labels = 1:9) 
+```
+```{r}
+# get aggregated data 
+mean.obs.train = aggregate(Default ~ rank, data = trainDS, mean) 
+mean.pred.train = aggregate(pred ~ rank, data = trainDS, mean) 
+ 
+mean.obs.val = aggregate(Default~ rank, data = testDS, mean) 
+mean.pred.val = aggregate(pred ~ rank, data = testDS, mean) 
+
+```
+```{r}
+# plot the mean vs deciles 
+par(mfrow=c(1,2)) 
+plot(mean.obs.train[,2], type="b", col="black", ylim=c(0,0.8), xlab="Decile", ylab="Prob") 
+lines(mean.pred.train[,2], type="b", col="red", lty=2) 
+title(main="Training Sample") 
+
+plot(mean.obs.val[,2], type="b", col="black", ylim=c(0,0.8), xlab="Decile", ylab="Prob") 
+lines(mean.pred.val[,2], type="b", col="red", lty=2) 
+title(main="Validation Sample") 
+```
