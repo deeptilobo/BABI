@@ -1,0 +1,371 @@
+---
+title: "Cafe"
+author: "Deepti Lobo"
+date: "12 January 2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+# Load libraries
+library(readr)
+library(readxl)
+library(tidyverse)
+library(arules)
+library(arulesViz)
+library(knitr)
+library(gridExtra)
+library(lubridate)
+
+setwd("D:/imp_doc/BABI/Marketing & Retail Analytics/Project")
+getwd()
+
+cafe = read.csv("Cafe Great Transaction Data set.csv", header = T)
+
+#trans = read.transactions("../Cafe Great Transaction Data set.csv", format = "single", ,header = T)
+```
+
+
+```{r}
+cafe$X <- NULL ##removing unwanted column from the table
+
+#Class type of the DS
+class(cafe)
+
+#The no of rows and columns
+dim(cafe)
+
+#Names of the columns
+names(cafe)
+cafe = cafe[1:10]
+
+```
+
+
+
+
+Interval Variables
+Date - The date on which the transaction happened. Date ranges from April, 2010 to Mar, 2011.
+Time - The time of he day when the transaction happened
+Quantity - no of items bought in each transaction
+Rate - The rate of each item
+Tax - Tax to be collected on each item
+Discount - Discount given on each time
+Total - Total price of the item, sum of rate, tax and discount.
+Nominal Variables
+Bill Number - The transaction ID
+Item Desc - Item description
+Category - It is divided into 8 categories. Beverages(30%), Food(39%), Liquor(4%), Liquor & Tobacco(0.03%), Merchandise(0.33%), Misc(0.81%), Tobacco(25%), Wines(0.55%)
+```{r}
+#Display the first six rows
+head(cafe)
+
+str(cafe)
+
+```
+
+```{r}
+#Is there any values missing?
+anyNA(cafe)
+
+summary(cafe)
+```
+
+```{r}
+#Glimpse
+glimpse(cafe)
+
+#Structure
+str(cafe)
+
+```
+```{r}
+mydata1 <- split(cafe$Item.Desc, cafe$Bill.Number)
+
+##converting data to transactions
+tData <- as (mydata1, "transactions")
+summary(tData)
+View(tData)
+##inspect(tData) ##do not run as we have massive dataset
+
+##Most frequent items
+itemFrequency(tData, type = "relative")
+itemFrequencyPlot(tData,topN = 10)
+```
+
+```{r}
+# Absolute Item Frequency Plot
+itemFrequencyPlot(tData, topN=15, type="absolute", col="wheat2",xlab="Item name", 
+                  ylab="Frequency (absolute)", main="Absolute Item Frequency Plot")
+
+
+```
+The itemFrequencyPlot() allows us to show the absolute or relative values. If absolute it will plot numeric frequencies of each item independently. If relative it will plot how many times these items have appeared as compared to others, as it's shown in the following plot.
+
+```{r}
+# Relative Item Frequency Plot
+itemFrequencyPlot(tData, topN=15, type="relative", col="lightcyan2", xlab="Item name", 
+                  ylab="Frequency (relative)", main="Relative Item Frequency Plot")
+```
+NIRVANA HOOKAH SINGLE  is the best-selling product by far, followed by MINT FLAVOUR SINGLE and CAPPUCCINO. Let's display some other visualizations describing the time distribution using the ggplot() function.
+
+```{r}
+# aggregated data
+rules = apriori(tData, parameter=list(support=0.001, confidence=0.1))
+```
+
+```{r}
+# Support and confidence values
+supportLevels <- c(0.1, 0.05, 0.01, 0.005)
+confidenceLevels <- c(0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+
+# Empty integers 
+rules_sup10 <- integer(length=9)
+rules_sup5 <- integer(length=9)
+rules_sup1 <- integer(length=9)
+rules_sup0.5 <- integer(length=9)
+
+# Apriori algorithm with a support level of 10%
+for (i in 1:length(confidenceLevels)) {
+  
+  rules_sup10[i] <- length(apriori(tData, parameter=list(sup=supportLevels[1], 
+                                   conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup5[i] <- length(apriori(tData, parameter=list(sup=supportLevels[2], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 1%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup1[i] <- length(apriori(tData, parameter=list(sup=supportLevels[3], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 0.5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup0.5[i] <- length(apriori(tData, parameter=list(sup=supportLevels[4], 
+                                    conf=confidenceLevels[i], target="rules")))
+  
+}
+
+```
+
+```{r}
+# Number of rules found with a support level of 10%
+plot1 <- qplot(confidenceLevels, rules_sup10, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 10%") +
+  theme_bw()
+
+# Number of rules found with a support level of 5%
+plot2 <- qplot(confidenceLevels, rules_sup5, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 5%") + 
+  scale_y_continuous(breaks=seq(0, 10, 2)) +
+  theme_bw()
+
+# Number of rules found with a support level of 1%
+plot3 <- qplot(confidenceLevels, rules_sup1, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 1%") + 
+  scale_y_continuous(breaks=seq(0, 50, 10)) +
+  theme_bw()
+
+# Number of rules found with a support level of 0.5%
+plot4 <- qplot(confidenceLevels, rules_sup0.5, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 0.5%") + 
+  scale_y_continuous(breaks=seq(0, 130, 20)) +
+  theme_bw()
+
+# Subplot
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
+```
+
+```{r}
+# Data frame
+num_rules <- data.frame(rules_sup10, rules_sup5, rules_sup1, rules_sup0.5, confidenceLevels)
+
+# Number of rules found with a support level of 10%, 5%, 1% and 0.5%
+ggplot(data=num_rules, aes(x=confidenceLevels)) +
+  
+  # Plot line and points (support level of 10%)
+  geom_line(aes(y=rules_sup10, colour="Support level of 10%")) + 
+  geom_point(aes(y=rules_sup10, colour="Support level of 10%")) +
+  
+  # Plot line and points (support level of 5%)
+  geom_line(aes(y=rules_sup5, colour="Support level of 5%")) +
+  geom_point(aes(y=rules_sup5, colour="Support level of 5%")) +
+  
+  # Plot line and points (support level of 1%)
+  geom_line(aes(y=rules_sup1, colour="Support level of 1%")) + 
+  geom_point(aes(y=rules_sup1, colour="Support level of 1%")) +
+  
+  # Plot line and points (support level of 0.5%)
+  geom_line(aes(y=rules_sup0.5, colour="Support level of 0.5%")) +
+  geom_point(aes(y=rules_sup0.5, colour="Support level of 0.5%")) +
+  
+  # Labs and theme
+  labs(x="Confidence levels", y="Number of rules found", 
+       title="Apriori algorithm with different support levels") +
+  theme_bw() +
+  theme(legend.title=element_blank())
+```
+
+```{r}
+# aggregated data
+rules = apriori(tData, parameter=list(support=0.001, confidence=0.1))
+rules = apriori(tData, parameter=list(support=0.005, confidence=0.8, minlen = 3))
+##rules = apriori(tData, parameter=list(support=0.005, confidence=0.8, maxlen = 4))
+
+#Convert rules into data frame 
+rules3 = as(rules, "data.frame") 
+View(rules3)
+write(rules,file="Market_Basket_analysis.csv",sep=",",row.names = FALSE)
+```
+```{r}
+# Show only particular product rules 
+##inspect( subset( rules, subset = rhs %pin% "Product H" )) 
+inspect(rules)
+
+# Show the top 10 rules
+options(digits=2)
+inspect(rules[1:10])
+
+# Get Summary Information
+summary(rules)
+```
+
+```{r}
+# Sort by Lift
+rules<-sort(rules, by="confidence", decreasing=TRUE)
+write(rules,file="Market_Basket_analysis.csv",sep=",",row.names = FALSE)
+
+```
+
+```{r}
+# Remove Unnecessary Rules
+subset.matrix <- is.subset(rules, rules)
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+rules.pruned <- rules[!redundant]
+rules<-rules.pruned
+
+```
+
+```{r}
+#Visualization
+library(arulesViz)
+plot(rules,method="graph")
+plot(rules, method = "graph", shading = NA)
+```
+```{r}
+# Scatter plot
+plot(rules, measure=c("support","lift"), shading="confidence")
+```
+
+```{r}
+# Graph
+plot(rules, method="graph")
+```
+```{r}
+# Graph
+plot(rules, method="graph", control=list(layout=igraph::in_circle()))
+```
+```{r}
+# Grouped matrix plot
+plot(rules, method="grouped")
+```
+
+```{r}
+library(arules)
+library(arulesViz)
+
+setwd("D:/imp_doc/BABI/Marketing & Retail Analytics/Project")
+getwd()
+
+cafe = read.csv("Cafe Great Transaction Data set.csv", header = T) 
+
+agg.txn = split(cafe$Item.Desc,cafe$Bill.Number)
+agg.txn2 = list()
+
+for (i in 1:length(agg.txn)) {
+  agg.txn2[[i]] = unique(agg.txn[[i]])
+}
+
+txns = as(agg.txn2,"transactions")
+
+txns1 = as(txns, "data.frame") 
+View(txns1)
+
+write.csv(agg.txn,file="Transaction_analysis.csv",row.names = FALSE)
+
+
+inspect(txns[9])
+
+summary(txns)
+View(txns)
+
+itemFrequencyPlot(txns,topN = 10, type = "absolute")
+
+# aggregated data
+rules = apriori(txns, parameter=list(support=0.001, confidence=0.1))
+rules = apriori(txns, parameter=list(support=0.0005, confidence=0.1))
+
+rules = apriori(txns, parameter=list(support=0.0009, confidence=0.2))
+
+summary(rules)
+inspect(rules[1:5])
+inspect(rules)
+
+#Convert rules into data frame 
+rules1 = as(rules, "data.frame") 
+View(rules1)
+write(rules,file="Market_Basket_analysis_best.csv",sep=",",row.names = FALSE)
+
+plot(rules,method="graph")
+plot(rules, method = "graph", shading = NA)
+plot(rules, measure=c("support","lift"), shading="confidence")
+
+plot(rules, method="graph", control=list(layout=igraph::in_circle()))
+
+plot(rules, method="grouped")
+
+```
+```{r}
+plot(rules[1:12],
+
+method = "graph",
+
+control = list(type = "items"))
+```
+
+```{r}
+plot(rules[1:12],
+
+method = "matrix",
+
+control = list(reorder = "similarity"))
+```
+```{r}
+arulesViz::plotly_arules(rules)
+```
+
